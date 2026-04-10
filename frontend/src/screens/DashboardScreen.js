@@ -39,7 +39,22 @@ const DashboardScreen = () => {
     }
     
     setPartnerName(name);
-    fetchAllOrders(partnerId);
+    
+    // Fetch all orders first
+    fetchAllOrders(partnerId).then(() => {
+      // After fetching, check if we should show Active tab
+      const lastTab = localStorage.getItem('lastActiveTab');
+      const hasActiveOrders = localStorage.getItem('hasActiveOrders') === 'true';
+      
+      // If user just accepted an order or has active orders, show Active tab
+      if (hasActiveOrders || lastTab === 'active') {
+        setActiveTab('active');
+      }
+      
+      // Clear the flag
+      localStorage.removeItem('hasActiveOrders');
+    });
+    
     fetchStats(partnerId);
     
     // Setup realtime subscription only once
@@ -169,6 +184,10 @@ const DashboardScreen = () => {
         delivery_partner_id: parseInt(partnerId)
       });
       
+      // Set flag so dashboard knows to show Active tab when we return
+      localStorage.setItem('hasActiveOrders', 'true');
+      localStorage.setItem('lastActiveTab', 'active');
+      
       navigate(`/shopping/${orderId}`);
     } catch (error) {
       console.error('Error accepting order:', error);
@@ -192,6 +211,11 @@ const DashboardScreen = () => {
       console.error('Error skipping order:', error);
       toast.error('Failed to skip order');
     }
+  };
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    localStorage.setItem('lastActiveTab', tab);
   };
 
   const handleContinueOrder = (order) => {
@@ -413,7 +437,7 @@ const DashboardScreen = () => {
       <div className="tabs-container">
         <button
           className={`tab ${activeTab === 'available' ? 'active' : ''}`}
-          onClick={() => setActiveTab('available')}
+          onClick={() => handleTabChange('available')}
           data-testid="tab-available"
         >
           Available
@@ -423,7 +447,7 @@ const DashboardScreen = () => {
         </button>
         <button
           className={`tab ${activeTab === 'active' ? 'active' : ''}`}
-          onClick={() => setActiveTab('active')}
+          onClick={() => handleTabChange('active')}
           data-testid="tab-active"
         >
           Active
@@ -433,7 +457,7 @@ const DashboardScreen = () => {
         </button>
         <button
           className={`tab ${activeTab === 'skipped' ? 'active' : ''}`}
-          onClick={() => setActiveTab('skipped')}
+          onClick={() => handleTabChange('skipped')}
           data-testid="tab-skipped"
         >
           Skipped
@@ -443,12 +467,20 @@ const DashboardScreen = () => {
         </button>
         <button
           className={`tab ${activeTab === 'completed' ? 'active' : ''}`}
-          onClick={() => setActiveTab('completed')}
+          onClick={() => handleTabChange('completed')}
           data-testid="tab-completed"
         >
           Completed
         </button>
       </div>
+
+      {/* Show notice if on Available tab but has active orders */}
+      {activeTab === 'available' && activeOrders.length > 0 && (
+        <div className="active-orders-notice">
+          <Clock size={20} weight="bold" />
+          <span>You have {activeOrders.length} order{activeOrders.length > 1 ? 's' : ''} in progress! Check the Active tab.</span>
+        </div>
+      )}
 
       <div className="screen-content">
         {loading ? (

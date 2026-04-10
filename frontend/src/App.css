@@ -1606,3 +1606,38 @@
   background: #f1f5f9;
   border-color: #2563eb;
 }
+
+/* Active Tab Pulse Animation */
+.tab.active[data-testid="tab-active"] .badge {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* Active Orders Notice */
+.active-orders-notice {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  margin: 1rem 1.25rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid #fbbf24;
+}
+
+.active-orders-notice svg {
+  flex-shrink: 0;
+}
