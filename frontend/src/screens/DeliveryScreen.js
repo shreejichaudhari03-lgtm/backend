@@ -92,6 +92,9 @@ const DeliveryScreen = () => {
       );
 
       if (completeResponse.data.success) {
+        // Remove working flag
+        localStorage.removeItem(`working_on_${orderId}`);
+        
         toast.success('Delivery completed successfully!');
         setTimeout(() => navigate('/dashboard'), 1500);
       } else {

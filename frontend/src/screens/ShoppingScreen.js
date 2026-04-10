@@ -68,10 +68,18 @@ const ShoppingScreen = () => {
   };
 
   const handleStartDelivery = async () => {
+    const partnerId = localStorage.getItem('partner_id');
+    
     try {
+      // NOW change the order status to 'delivering' and assign to this driver
       await axios.patch(`${BACKEND_URL}/api/orders/${orderId}`, {
-        status: 'delivering'
+        status: 'delivering',
+        delivery_partner_id: partnerId
       });
+      
+      // Remove the working flag since it's now officially assigned
+      localStorage.removeItem(`working_on_${orderId}`);
+      
       navigate(`/delivery/${orderId}`);
     } catch (error) {
       console.error('Error updating order:', error);

@@ -39,22 +39,7 @@ const DashboardScreen = () => {
     }
     
     setPartnerName(name);
-    
-    // Fetch all orders first
-    fetchAllOrders(partnerId).then(() => {
-      // After fetching, check if we should show Active tab
-      const lastTab = localStorage.getItem('lastActiveTab');
-      const hasActiveOrders = localStorage.getItem('hasActiveOrders') === 'true';
-      
-      // If user just accepted an order or has active orders, show Active tab
-      if (hasActiveOrders || lastTab === 'active') {
-        setActiveTab('active');
-      }
-      
-      // Clear the flag
-      localStorage.removeItem('hasActiveOrders');
-    });
-    
+    fetchAllOrders(partnerId);
     fetchStats(partnerId);
     
     // Setup realtime subscription only once
@@ -179,14 +164,11 @@ const DashboardScreen = () => {
     const partnerId = localStorage.getItem('partner_id');
     
     try {
-      await axios.patch(`${BACKEND_URL}/api/orders/${orderId}`, {
-        status: 'shopping',
-        delivery_partner_id: parseInt(partnerId)
-      });
+      // Don't change status yet - just navigate to shopping
+      // Order stays in Available (pending) until delivery starts
       
-      // Set flag so dashboard knows to show Active tab when we return
-      localStorage.setItem('hasActiveOrders', 'true');
-      localStorage.setItem('lastActiveTab', 'active');
+      // Store that this driver is working on this order
+      localStorage.setItem(`working_on_${orderId}`, partnerId);
       
       navigate(`/shopping/${orderId}`);
     } catch (error) {
@@ -204,6 +186,9 @@ const DashboardScreen = () => {
         status: 'skipped',
         delivery_partner_id: partnerId
       });
+      
+      // Remove working flag
+      localStorage.removeItem(`working_on_${orderId}`);
       
       toast.success('Order skipped');
       fetchAllOrders(partnerId);
@@ -317,7 +302,7 @@ const DashboardScreen = () => {
             className="btn-primary-sm"
             data-testid={`accept-order-button-${order.id}`}
           >
-            Accept Order
+            {localStorage.getItem(`working_on_${order.id}`) ? 'Resume Order' : 'Accept Order'}
           </button>
         </div>
       )}
@@ -473,14 +458,6 @@ const DashboardScreen = () => {
           Completed
         </button>
       </div>
-
-      {/* Show notice if on Available tab but has active orders */}
-      {activeTab === 'available' && activeOrders.length > 0 && (
-        <div className="active-orders-notice">
-          <Clock size={20} weight="bold" />
-          <span>You have {activeOrders.length} order{activeOrders.length > 1 ? 's' : ''} in progress! Check the Active tab.</span>
-        </div>
-      )}
 
       <div className="screen-content">
         {loading ? (
