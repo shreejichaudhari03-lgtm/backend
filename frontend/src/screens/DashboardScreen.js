@@ -438,4 +438,13 @@ const DashboardScreen = () => {
           <div className="orders-list" data-testid={`${activeTab}-orders-list`}>
             {currentOrders.map((order) => renderOrderCard(order, activeTab))}
           </div>
-        )}\n      </div>\n\n      {/* Image Modal */}\n      <ImageModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />\n    </div>\n  );\n};\n\nexport default DashboardScreen;
+        )}
+      </div>
+
+      {/* Image Modal */}
+      <ImageModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
+    </div>
+  );
+};
+
+export default DashboardScreen;
