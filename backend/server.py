@@ -37,14 +37,14 @@ class PinLoginRequest(BaseModel):
 
 class PinLoginResponse(BaseModel):
     success: bool
-    partner_id: Optional[int] = None
+    partner_id: Optional[str] = None
     partner_name: Optional[str] = None
     partner_phone: Optional[str] = None
     message: Optional[str] = None
 
 class OrderUpdateRequest(BaseModel):
     status: Optional[str] = None
-    delivery_partner_id: Optional[int] = None
+    delivery_partner_id: Optional[str] = None
 
 class CompleteDeliveryRequest(BaseModel):
     customer_pin: str
@@ -83,7 +83,7 @@ async def pin_login(request: PinLoginRequest):
 @api_router.get("/orders")
 async def get_orders(
     status: Optional[str] = None,
-    partner_id: Optional[int] = None,
+    partner_id: Optional[str] = None,
     limit: Optional[int] = 100
 ):
     """Get orders with optional filters"""
@@ -102,7 +102,7 @@ async def get_orders(
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/orders/{order_id}")
-async def get_order_details(order_id: int):
+async def get_order_details(order_id: str):
     """Get detailed information about a specific order"""
     try:
         response = supabase.table("orders").select("*").eq(
@@ -120,7 +120,7 @@ async def get_order_details(order_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.patch("/orders/{order_id}")
-async def update_order(order_id: int, request: OrderUpdateRequest):
+async def update_order(order_id: str, request: OrderUpdateRequest):
     """Update order status and/or delivery partner"""
     try:
         update_data = {}
@@ -144,7 +144,7 @@ async def update_order(order_id: int, request: OrderUpdateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/orders/{order_id}/reject")
-async def reject_order(order_id: int):
+async def reject_order(order_id: str):
     """Reject/skip an order"""
     try:
         # Simply return success - order stays in pending for other drivers
@@ -154,7 +154,7 @@ async def reject_order(order_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/orders/{order_id}/complete")
-async def complete_delivery(order_id: int, request: CompleteDeliveryRequest):
+async def complete_delivery(order_id: str, request: CompleteDeliveryRequest):
     """Complete delivery with PIN verification"""
     try:
         # Get order
@@ -184,7 +184,7 @@ async def complete_delivery(order_id: int, request: CompleteDeliveryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/orders/{order_id}/upload-photo")
-async def upload_delivery_photo(order_id: int, file: UploadFile = File(...)):
+async def upload_delivery_photo(order_id: str, file: UploadFile = File(...)):
     """Upload delivery proof photo to Supabase Storage"""
     try:
         # Validate file type
@@ -237,7 +237,7 @@ async def upload_delivery_photo(order_id: int, file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/partner/{partner_id}/stats")
-async def get_partner_stats(partner_id: int):
+async def get_partner_stats(partner_id: str):
     """Get partner statistics and earnings"""
     try:
         # Get all completed orders for this partner
@@ -287,7 +287,7 @@ async def get_partner_stats(partner_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/partner/{partner_id}")
-async def get_partner_profile(partner_id: int):
+async def get_partner_profile(partner_id: str):
     """Get partner profile information"""
     try:
         response = supabase.table("delivery_partners").select(
@@ -305,7 +305,7 @@ async def get_partner_profile(partner_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.patch("/partner/{partner_id}/status")
-async def update_partner_status(partner_id: int, request: PartnerStatusUpdate):
+async def update_partner_status(partner_id: str, request: PartnerStatusUpdate):
     """Update partner online/offline status"""
     try:
         response = supabase.table("delivery_partners").update({
