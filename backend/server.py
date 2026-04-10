@@ -205,20 +205,29 @@ async def upload_delivery_photo(order_id: str, file: UploadFile = File(...)):
                 detail="File size exceeds 5MB limit"
             )
         
-        # Generate unique filename
-        file_extension = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-        unique_filename = f"order_{order_id}_{uuid.uuid4().hex[:8]}.{file_extension}"
-        file_path = f"deliveries/{unique_filename}"
-        
-        # Upload to Supabase Storage
-        storage_response = supabase.storage.from_("delivery-photos").upload(
-            path=file_path,
-            file=file_content,
-            file_options={"content-type": file.content_type}
-        )
-        
-        # Get public URL
-        public_url = supabase.storage.from_("delivery-photos").get_public_url(file_path)
+        try:
+            # Generate unique filename
+            file_extension = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+            unique_filename = f"order_{order_id}_{uuid.uuid4().hex[:8]}.{file_extension}"
+            file_path = f"deliveries/{unique_filename}"
+            
+            # Upload to Supabase Storage
+            storage_response = supabase.storage.from_("delivery-photos").upload(
+                path=file_path,
+                file=file_content,
+                file_options={"content-type": file.content_type}
+            )
+            
+            # Get public URL
+            public_url = supabase.storage.from_("delivery-photos").get_public_url(file_path)
+            
+        except Exception as storage_error:
+            logger.warning(f"Storage upload failed: {storage_error}")
+            # Fallback: save as base64 in database if storage bucket doesn't exist
+            import base64
+            base64_image = base64.b64encode(file_content).decode('utf-8')
+            public_url = f"data:{file.content_type};base64,{base64_image}"
+            logger.info("Using base64 fallback for photo storage")
         
         # Update order with photo URL
         update_response = supabase.table("orders").update({

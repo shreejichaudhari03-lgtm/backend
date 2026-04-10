@@ -12,6 +12,7 @@ const ShoppingScreen = () => {
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [checkedItems, setCheckedItems] = useState(new Set());
+  const [removedItems, setRemovedItems] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
 
@@ -41,6 +42,18 @@ const ShoppingScreen = () => {
     setCheckedItems(newChecked);
   };
 
+  const removeItem = (index, e) => {
+    e.stopPropagation();
+    const newRemoved = new Set(removedItems);
+    newRemoved.add(index);
+    setRemovedItems(newRemoved);
+    
+    // Also uncheck if it was checked
+    const newChecked = new Set(checkedItems);
+    newChecked.delete(index);
+    setCheckedItems(newChecked);
+  };
+
   const handleCallCustomer = () => {
     if (order?.customer_phone) {
       window.location.href = `tel:${order.customer_phone}`;
@@ -59,8 +72,9 @@ const ShoppingScreen = () => {
     }
   };
 
-  const allItemsChecked = order?.items?.length > 0 && 
-    checkedItems.size === order.items.length;
+  const availableItemsCount = order?.items?.length - removedItems.size || 0;
+  const allItemsChecked = availableItemsCount > 0 && 
+    checkedItems.size === availableItemsCount;
 
   if (loading) {
     return (
@@ -122,46 +136,73 @@ const ShoppingScreen = () => {
           <h3 className="section-title">Items to collect ({order.items?.length || 0})</h3>
           
           {order.items && order.items.length > 0 ? (
-            order.items.map((item, index) => (
-              <div
-                key={index}
-                className={`checklist-item ${checkedItems.has(index) ? 'checked' : ''}`}
-                onClick={() => toggleItem(index)}
-                data-testid={`checklist-item-${index}`}
-              >
-                <div className="checkbox-wrapper">
-                  {checkedItems.has(index) ? (
-                    <CheckCircle size={32} weight="fill" className="checkbox-icon checked" />
-                  ) : (
-                    <Circle size={32} weight="regular" className="checkbox-icon" />
+            order.items.map((item, index) => {
+              const isRemoved = removedItems.has(index);
+              const isChecked = checkedItems.has(index);
+              
+              return (
+                <div
+                  key={index}
+                  className={`checklist-item ${isChecked ? 'checked' : ''} ${isRemoved ? 'removed' : ''}`}
+                  onClick={() => !isRemoved && toggleItem(index)}
+                  data-testid={`checklist-item-${index}`}
+                >
+                  <div className="checkbox-wrapper">
+                    {isRemoved ? (
+                      <Circle size={32} weight="regular" className="checkbox-icon removed-icon" />
+                    ) : isChecked ? (
+                      <CheckCircle size={32} weight="fill" className="checkbox-icon checked" />
+                    ) : (
+                      <Circle size={32} weight="regular" className="checkbox-icon" />
+                    )}
+                  </div>
+                  {(item.image || item.image_url) && !isRemoved && (
+                    <img 
+                      src={item.image || item.image_url} 
+                      alt={item.name}
+                      className="checklist-item-image"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedImage(item.image || item.image_url);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
                   )}
+                  <div className="item-details">
+                    <span className="item-name">
+                      {item.name}
+                      {isRemoved && <span className="unavailable-tag">Not Available</span>}
+                    </span>
+                    <span className="item-meta">
+                      Qty: {item.quantity} • ${item.price?.toFixed(2)} each
+                    </span>
+                  </div>
+                  <div className="item-actions">
+                    {!isRemoved && (
+                      <button
+                        onClick={(e) => removeItem(index, e)}
+                        className="remove-item-btn"
+                        data-testid={`remove-item-button-${index}`}
+                      >
+                        <Circle size={20} weight="bold" className="x-icon">
+                          <line x1="8" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="2"/>
+                          <line x1="12" y1="8" x2="8" y2="12" stroke="currentColor" strokeWidth="2"/>
+                        </Circle>
+                        ✕
+                      </button>
+                    )}
+                    {!isRemoved && (
+                      <div className="item-price">
+                        ${(item.quantity * item.price).toFixed(2)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {(item.image || item.image_url) && (
-                  <img 
-                    src={item.image || item.image_url} 
-                    alt={item.name}
-                    className="checklist-item-image"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedImage(item.image || item.image_url);
-                    }}
-                    style={{ cursor: 'pointer' }}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                )}
-                <div className="item-details">
-                  <span className="item-name">{item.name}</span>
-                  <span className="item-meta">
-                    Qty: {item.quantity} • ${item.price?.toFixed(2)} each
-                  </span>
-                </div>
-                <div className="item-price">
-                  ${(item.quantity * item.price).toFixed(2)}
-                </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <p className="text-secondary">No items in this order</p>
           )}
@@ -171,11 +212,12 @@ const ShoppingScreen = () => {
           <div className="progress-bar">
             <div 
               className="progress-fill"
-              style={{ width: `${(checkedItems.size / (order.items?.length || 1)) * 100}%` }}
+              style={{ width: `${availableItemsCount > 0 ? (checkedItems.size / availableItemsCount) * 100 : 0}%` }}
             />
           </div>
           <span className="progress-text">
-            {checkedItems.size} of {order.items?.length || 0} items collected
+            {checkedItems.size} of {availableItemsCount} items collected
+            {removedItems.size > 0 && ` • ${removedItems.size} unavailable`}
           </span>
         </div>
       </div>
