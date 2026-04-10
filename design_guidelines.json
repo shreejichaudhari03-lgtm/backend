@@ -1,0 +1,160 @@
+{
+  "project_name": "Repid Cart Delivery Partner App",
+  "app_type": "mobile_web_app",
+  "theme": "light",
+  "archetype": "4 (Swiss & High-Contrast - Functional variant)",
+  "rationale": "For a delivery driver app, clarity, high contrast, and large touch targets are paramount. The environment is outdoors, moving, and time-sensitive. A crisp white/slate background with a vibrant primary blue ensures critical information (like addresses and PINs) pops instantly.",
+  "colors": {
+    "primary": {
+      "DEFAULT": "#2563eb",
+      "hover": "#1d4ed8",
+      "active": "#1e40af",
+      "tailwind": "blue-600"
+    },
+    "background": {
+      "DEFAULT": "#f8fafc",
+      "tailwind": "slate-50"
+    },
+    "surface": {
+      "DEFAULT": "#ffffff",
+      "tailwind": "white"
+    },
+    "text": {
+      "primary": "#0f172a",
+      "secondary": "#64748b",
+      "inverse": "#ffffff",
+      "tailwind_primary": "slate-900",
+      "tailwind_secondary": "slate-500"
+    },
+    "status": {
+      "success": "#22c55e",
+      "success_tailwind": "green-500",
+      "warning": "#eab308",
+      "warning_tailwind": "yellow-500",
+      "error": "#ef4444",
+      "error_tailwind": "red-500"
+    },
+    "border": {
+      "DEFAULT": "#e2e8f0",
+      "tailwind": "slate-200"
+    }
+  },
+  "typography": {
+    "font_families": {
+      "headings": "Manrope, sans-serif",
+      "body": "IBM Plex Sans, sans-serif"
+    },
+    "hierarchy": {
+      "h1": "text-3xl font-extrabold tracking-tight text-slate-900",
+      "h2": "text-2xl font-bold tracking-tight text-slate-900",
+      "h3": "text-xl font-bold text-slate-900",
+      "body": "text-base font-normal text-slate-700 leading-relaxed",
+      "small": "text-sm font-medium text-slate-500",
+      "overline": "text-xs font-bold uppercase tracking-widest text-slate-500"
+    }
+  },
+  "layout_and_spacing": {
+    "container": "w-full max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col relative pb-24",
+    "padding": {
+      "screen": "p-5",
+      "card": "p-5",
+      "section_gap": "gap-6",
+      "item_gap": "gap-4"
+    },
+    "border_radius": {
+      "card": "rounded-2xl",
+      "button": "rounded-xl",
+      "input": "rounded-xl"
+    },
+    "shadows": {
+      "card": "shadow-sm",
+      "sticky_bottom": "shadow-[0_-4px_20px_rgba(0,0,0,0.05)]"
+    }
+  },
+  "components": {
+    "Button": {
+      "primary": "w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-[0.98]",
+      "secondary": "w-full h-14 bg-white border-2 border-slate-200 text-slate-700 font-bold text-lg rounded-xl flex items-center justify-center gap-2 transition-colors hover:bg-slate-50 active:scale-[0.98]",
+      "disabled": "w-full h-14 bg-slate-200 text-slate-400 font-bold text-lg rounded-xl flex items-center justify-center cursor-not-allowed",
+      "sticky_container": "fixed bottom-0 left-0 right-0 p-5 bg-white/90 backdrop-blur-md border-t border-slate-200 z-50 max-w-md mx-auto pb-8"
+    },
+    "Card": {
+      "base": "bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col gap-3 relative overflow-hidden"
+    },
+    "Input": {
+      "pin": "w-full h-16 bg-white border-2 border-slate-200 rounded-xl text-center text-2xl font-bold tracking-[0.2em] focus:border-blue-600 focus:ring-2 focus:ring-blue-100 outline-none transition-all placeholder:text-slate-300",
+      "camera_upload": "w-full h-32 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-2 text-slate-500 cursor-pointer hover:bg-slate-100 hover:border-blue-400 transition-colors"
+    },
+    "TopNav": {
+      "base": "w-full h-16 bg-white border-b border-slate-200 flex items-center justify-between px-5 sticky top-0 z-40"
+    }
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "usage": "Use bold or duotone weights for clarity. Sizes: 24px for standard, 32px for empty states/hero.",
+    "installation_command": "yarn add @phosphor-icons/react"
+  },
+  "screens_breakdown": {
+    "Screen1_Login": {
+      "layout": "Centered flex-col, high whitespace.",
+      "elements": [
+        "Brand Logo/Name (Repid Cart Driver)",
+        "Title: 'Welcome back'",
+        "Subtitle: 'Enter your 4-digit PIN to access orders'",
+        "PIN Input (4-digit, numeric pad)",
+        "Login Button (Primary)"
+      ],
+      "data_testids": ["login-pin-input", "login-submit-button"]
+    },
+    "Screen2_AvailableOrders": {
+      "layout": "List view, sticky top nav.",
+      "elements": [
+        "Top Nav: Driver Name (Test Driver), Online Status Indicator",
+        "List of Pending Orders (Realtime)",
+        "Order Card: Order #, Address (prominent), Item count, Total price",
+        "Action: 'Accept Order' button inside card OR sticky at bottom if single selected"
+      ],
+      "data_testids": ["available-orders-list", "order-card-{id}", "accept-order-button-{id}"]
+    },
+    "Screen3_Shopping": {
+      "layout": "List view with sticky bottom action.",
+      "elements": [
+        "Header: 'Shopping List' + Order #",
+        "Checklist Items: Custom large hit-area checkboxes. When checked -> strikethrough text and dim opacity.",
+        "Sticky Bottom Bar: 'Start Delivery' button (disabled until all items = checked)"
+      ],
+      "data_testids": ["shopping-list", "checklist-item-{id}", "start-delivery-button"]
+    },
+    "Screen4_Delivery": {
+      "layout": "Vertical stack with clear separation of steps.",
+      "elements": [
+        "Header: 'Delivery in Progress'",
+        "Address Block: Large text, map icon",
+        "Verification Step: Customer PIN input field (Driver asks customer)",
+        "Proof Step: Camera upload area (HTML input capture='environment')",
+        "Sticky Bottom Bar: 'Complete Delivery' button"
+      ],
+      "data_testids": ["delivery-address-block", "customer-pin-input", "camera-upload-input", "complete-delivery-button"]
+    }
+  },
+  "testing": {
+    "rules": [
+      "All buttons, inputs, and list items MUST have a data-testid attribute.",
+      "Use kebab-case for data-testid values (e.g., data-testid='accept-order-button').",
+      "Do not use appearance-based test IDs."
+    ]
+  },
+  "animations": {
+    "transitions": "Use Tailwind default transition-all duration-200 ease-in-out for buttons and inputs.",
+    "lists": "Staggered fade-in for list items if using framer-motion, otherwise simple CSS appear.",
+    "interactions": "active:scale-[0.98] on all major touch targets to provide physical feedback."
+  },
+  "instructions_to_main_agent": [
+    "Ensure the app is built mobile-first. Max width should be restricted to mobile dimensions (e.g. max-w-md mx-auto) on desktop screens.",
+    "Use Phosphor icons for all iconography.",
+    "The PIN login should restrict to exactly 4 digits. Use a number-pad keyboard type (input type='tel' or inputMode='numeric').",
+    "For the camera upload, use <input type='file' accept='image/*' capture='environment' /> to trigger the native camera on mobile.",
+    "Supabase Realtime should be implemented carefully to update the 'Available Orders' list instantly.",
+    "All primary action buttons MUST be fixed to the bottom (sticky) so the driver doesn't have to scroll to find them while walking."
+  ]
+}
