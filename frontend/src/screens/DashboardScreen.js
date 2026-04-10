@@ -36,7 +36,14 @@ const DashboardScreen = () => {
     setPartnerName(name);
     fetchAllOrders(partnerId);
     fetchStats(partnerId);
-    setupRealtimeSubscription();
+    
+    // Setup realtime subscription
+    const cleanup = setupRealtimeSubscription();
+    
+    // Cleanup on unmount
+    return () => {
+      if (cleanup) cleanup();
+    };
   }, [navigate]);
 
   const fetchAllOrders = async (partnerId) => {
@@ -82,8 +89,10 @@ const DashboardScreen = () => {
 
   const setupRealtimeSubscription = () => {
     try {
+      console.log('🔄 Setting up Realtime subscription for orders...');
+      
       const channel = supabase
-        .channel('orders-changes')
+        .channel('orders-realtime-channel')
         .on(
           'postgres_changes',
           {
@@ -92,24 +101,36 @@ const DashboardScreen = () => {
             table: 'orders'
           },
           (payload) => {
-            console.log('Order change detected:', payload);
+            console.log('📦 Order change detected:', payload.eventType, payload);
+            
+            // Refresh orders and stats when any change occurs
             const partnerId = localStorage.getItem('partner_id');
-            fetchAllOrders(partnerId);
-            fetchStats(partnerId);
+            if (partnerId) {
+              fetchAllOrders(partnerId);
+              fetchStats(partnerId);
+            }
           }
         )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
-            console.log('✓ Realtime connected');
+            console.log('✅ Realtime connected! Orders will update automatically.');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.warn('⚠️ Realtime connection error. Please enable Realtime in Supabase.');
+          } else if (status === 'TIMED_OUT') {
+            console.warn('⚠️ Realtime connection timed out.');
           }
         });
 
+      // Return cleanup function
       return () => {
+        console.log('🔌 Cleaning up Realtime subscription');
         supabase.removeChannel(channel);
       };
     } catch (error) {
-      console.error('Realtime subscription error:', error);
-      // Continue without realtime - will still work, just need manual refresh
+      console.error('❌ Realtime subscription error:', error);
+      console.warn('📝 App will still work, but you need to refresh to see new orders.');
+      // Return empty cleanup function
+      return () => {};
     }
   };
 
