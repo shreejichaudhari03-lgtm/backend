@@ -22,6 +22,7 @@ const DashboardScreen = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [partnerName, setPartnerName] = useState('');
+  const [realtimeChannel, setRealtimeChannel] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,14 +38,20 @@ const DashboardScreen = () => {
     fetchAllOrders(partnerId);
     fetchStats(partnerId);
     
-    // Setup realtime subscription
-    const cleanup = setupRealtimeSubscription();
+    // Setup realtime subscription only once
+    if (!realtimeChannel) {
+      const channel = setupRealtimeSubscription();
+      setRealtimeChannel(channel);
+    }
     
     // Cleanup on unmount
     return () => {
-      if (cleanup) cleanup();
+      if (realtimeChannel) {
+        console.log('🔌 Cleaning up Realtime subscription');
+        supabase.removeChannel(realtimeChannel);
+      }
     };
-  }, [navigate]);
+  }, [navigate]); // Remove realtimeChannel from dependencies to prevent re-subscription
 
   const fetchAllOrders = async (partnerId) => {
     try {
@@ -92,20 +99,22 @@ const DashboardScreen = () => {
       console.log('🔄 Setting up Realtime subscription for orders...');
       
       const channel = supabase
-        .channel('orders-realtime-channel')
+        .channel('orders-realtime-' + Date.now()) // Unique channel name
         .on(
           'postgres_changes',
           {
-            event: '*',
+            event: '*', // Listen to all events: INSERT, UPDATE, DELETE
             schema: 'public',
             table: 'orders'
           },
           (payload) => {
-            console.log('📦 Order change detected:', payload.eventType, payload);
+            console.log('📦 Order change detected:', payload.eventType);
+            console.log('Order data:', payload.new || payload.old);
             
             // Refresh orders and stats when any change occurs
             const partnerId = localStorage.getItem('partner_id');
             if (partnerId) {
+              console.log('🔄 Refreshing orders and stats...');
               fetchAllOrders(partnerId);
               fetchStats(partnerId);
             }
@@ -115,22 +124,19 @@ const DashboardScreen = () => {
           if (status === 'SUBSCRIBED') {
             console.log('✅ Realtime connected! Orders will update automatically.');
           } else if (status === 'CHANNEL_ERROR') {
-            console.warn('⚠️ Realtime connection error. Please enable Realtime in Supabase.');
+            console.error('❌ Realtime connection error. Check Supabase settings.');
           } else if (status === 'TIMED_OUT') {
             console.warn('⚠️ Realtime connection timed out.');
+          } else {
+            console.log('Realtime status:', status);
           }
         });
 
-      // Return cleanup function
-      return () => {
-        console.log('🔌 Cleaning up Realtime subscription');
-        supabase.removeChannel(channel);
-      };
+      // Return the channel for cleanup
+      return channel;
     } catch (error) {
       console.error('❌ Realtime subscription error:', error);
-      console.warn('📝 App will still work, but you need to refresh to see new orders.');
-      // Return empty cleanup function
-      return () => {};
+      return null;
     }
   };
 
