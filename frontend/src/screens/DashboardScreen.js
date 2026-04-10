@@ -11,6 +11,8 @@ import {
   Clock,
   X
 } from '@phosphor-icons/react';
+import { toast } from 'sonner';
+import ImageModal from '../components/ImageModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -19,10 +21,12 @@ const DashboardScreen = () => {
   const [availableOrders, setAvailableOrders] = useState([]);
   const [activeOrders, setActiveOrders] = useState([]);
   const [completedOrders, setCompletedOrders] = useState([]);
+  const [skippedOrders, setSkippedOrders] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [partnerName, setPartnerName] = useState('');
   const [realtimeChannel, setRealtimeChannel] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -78,6 +82,12 @@ const DashboardScreen = () => {
         `${BACKEND_URL}/api/orders?status=completed&partner_id=${partnerId}&limit=20`
       );
       setCompletedOrders(completedRes.data.orders || []);
+
+      // Fetch skipped orders
+      const skippedRes = await axios.get(
+        `${BACKEND_URL}/api/orders?status=skipped&partner_id=${partnerId}`
+      );
+      setSkippedOrders(skippedRes.data.orders || []);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -157,12 +167,20 @@ const DashboardScreen = () => {
   };
 
   const handleRejectOrder = async (orderId) => {
+    const partnerId = localStorage.getItem('partner_id');
+    
     try {
-      await axios.post(`${BACKEND_URL}/api/orders/${orderId}/reject`);
-      const partnerId = localStorage.getItem('partner_id');
+      // Mark order as skipped for this driver
+      await axios.patch(`${BACKEND_URL}/api/orders/${orderId}`, {
+        status: 'skipped',
+        delivery_partner_id: partnerId
+      });
+      
+      toast.success('Order skipped');
       fetchAllOrders(partnerId);
     } catch (error) {
-      console.error('Error rejecting order:', error);
+      console.error('Error skipping order:', error);
+      toast.error('Failed to skip order');
     }
   };
 
@@ -212,6 +230,8 @@ const DashboardScreen = () => {
                   src={item.image || item.image_url} 
                   alt={item.name}
                   className="product-preview-image"
+                  onClick={() => setSelectedImage(item.image || item.image_url)}
+                  style={{ cursor: 'pointer' }}
                   onError={(e) => {
                     e.target.style.display = 'none';
                   }}
@@ -278,6 +298,16 @@ const DashboardScreen = () => {
         </button>
       )}
 
+      {type === 'skipped' && (
+        <button
+          onClick={() => handleAcceptOrder(order.id)}
+          className="btn-primary"
+          data-testid={`reaccept-order-button-${order.id}`}
+        >
+          Accept Order
+        </button>
+      )}
+
       {type === 'completed' && (
         <div className="completed-info">
           <CheckCircle size={18} weight="fill" className="check-icon" />
@@ -303,6 +333,11 @@ const DashboardScreen = () => {
         icon: <CheckCircle size={64} weight="duotone" />,
         title: 'No completed deliveries',
         subtitle: 'Your delivery history will appear here'
+      },
+      skipped: {
+        icon: <X size={64} weight="duotone" />,
+        title: 'No skipped orders',
+        subtitle: 'Orders you skip will appear here'
       }
     };
 
@@ -319,7 +354,8 @@ const DashboardScreen = () => {
   const currentOrders = {
     available: availableOrders,
     active: activeOrders,
-    completed: completedOrders
+    completed: completedOrders,
+    skipped: skippedOrders
   }[activeTab];
 
   return (
@@ -375,6 +411,16 @@ const DashboardScreen = () => {
           )}
         </button>
         <button
+          className={`tab ${activeTab === 'skipped' ? 'active' : ''}`}
+          onClick={() => setActiveTab('skipped')}
+          data-testid="tab-skipped"
+        >
+          Skipped
+          {skippedOrders.length > 0 && (
+            <span className="badge">{skippedOrders.length}</span>
+          )}
+        </button>
+        <button
           className={`tab ${activeTab === 'completed' ? 'active' : ''}`}
           onClick={() => setActiveTab('completed')}
           data-testid="tab-completed"
@@ -392,10 +438,4 @@ const DashboardScreen = () => {
           <div className="orders-list" data-testid={`${activeTab}-orders-list`}>
             {currentOrders.map((order) => renderOrderCard(order, activeTab))}
           </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default DashboardScreen;
+        )}\n      </div>\n\n      {/* Image Modal */}\n      <ImageModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />\n    </div>\n  );\n};\n\nexport default DashboardScreen;

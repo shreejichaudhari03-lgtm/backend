@@ -59,11 +59,6 @@ const DeliveryScreen = () => {
   };
 
   const handleCompleteDelivery = async () => {
-    if (customerPin.length !== 4) {
-      toast.error('Please enter the 4-digit customer PIN');
-      return;
-    }
-
     if (!photoFile) {
       toast.error('Please take a delivery proof photo');
       return;
@@ -90,17 +85,17 @@ const DeliveryScreen = () => {
         throw new Error('Photo upload failed');
       }
 
-      // Verify PIN and complete delivery
-      const completeResponse = await axios.post(
-        `${BACKEND_URL}/api/orders/${orderId}/complete`,
-        { customer_pin: customerPin }
+      // Complete delivery (no PIN needed)
+      const completeResponse = await axios.patch(
+        `${BACKEND_URL}/api/orders/${orderId}`,
+        { status: 'completed' }
       );
 
       if (completeResponse.data.success) {
         toast.success('Delivery completed successfully!');
         setTimeout(() => navigate('/dashboard'), 1500);
       } else {
-        toast.error(completeResponse.data.message || 'Invalid customer PIN');
+        toast.error('Failed to complete delivery');
       }
     } catch (error) {
       console.error('Error completing delivery:', error);
@@ -173,24 +168,9 @@ const DeliveryScreen = () => {
           </div>
         </div>
 
-        <div className="verification-section">
-          <h3>Customer PIN Verification</h3>
-          <p className="instruction-text">Ask the customer for their 4-digit PIN</p>
-          <input
-            type="tel"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength="4"
-            value={customerPin}
-            onChange={(e) => setCustomerPin(e.target.value.replace(/\D/g, ''))}
-            placeholder="••••"
-            className="pin-input"
-            data-testid="customer-pin-input"
-          />
-        </div>
-
         <div className="photo-section">
           <h3>Delivery Proof Photo</h3>
+          <p className="instruction-text">Take a photo of the delivered items at the door</p>
           <input
             type="file"
             accept="image/*"
@@ -228,7 +208,7 @@ const DeliveryScreen = () => {
         <button
           onClick={handleCompleteDelivery}
           className="btn-primary"
-          disabled={completing || customerPin.length !== 4 || !photoFile}
+          disabled={completing || !photoFile}
           data-testid="complete-delivery-button"
         >
           {completing ? (

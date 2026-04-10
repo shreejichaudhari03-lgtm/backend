@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
 import { CheckCircle, Circle, ArrowLeft, Phone } from '@phosphor-icons/react';
+import ImageModal from '../components/ImageModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -12,6 +13,7 @@ const ShoppingScreen = () => {
   const [order, setOrder] = useState(null);
   const [checkedItems, setCheckedItems] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     fetchOrderDetails();
@@ -139,6 +141,11 @@ const ShoppingScreen = () => {
                     src={item.image || item.image_url} 
                     alt={item.name}
                     className="checklist-item-image"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImage(item.image || item.image_url);
+                    }}
+                    style={{ cursor: 'pointer' }}
                     onError={(e) => {
                       e.target.style.display = 'none';
                     }}
@@ -183,6 +190,9 @@ const ShoppingScreen = () => {
           {allItemsChecked ? 'Start Delivery' : 'Check all items first'}
         </button>
       </div>
+
+      {/* Image Modal */}
+      <ImageModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
     </div>
   );
 };
