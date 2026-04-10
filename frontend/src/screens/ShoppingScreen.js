@@ -134,6 +134,16 @@ const ShoppingScreen = () => {
                     <Circle size={32} weight="regular" className="checkbox-icon" />
                   )}
                 </div>
+                {(item.image || item.image_url) && (
+                  <img 
+                    src={item.image || item.image_url} 
+                    alt={item.name}
+                    className="checklist-item-image"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                )}
                 <div className="item-details">
                   <span className="item-name">{item.name}</span>
                   <span className="item-meta">

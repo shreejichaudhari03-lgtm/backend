@@ -202,6 +202,36 @@ const DashboardScreen = () => {
         </div>
       </div>
 
+      {/* Product Images Preview */}
+      {order.items && order.items.length > 0 && (
+        <div className="order-products-preview">
+          {order.items.slice(0, 3).map((item, idx) => (
+            <div key={idx} className="product-preview-item">
+              {item.image || item.image_url ? (
+                <img 
+                  src={item.image || item.image_url} 
+                  alt={item.name}
+                  className="product-preview-image"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="product-preview-placeholder">
+                  <Package size={16} weight="duotone" />
+                </div>
+              )}
+              <span className="product-preview-name">{item.name}</span>
+            </div>
+          ))}
+          {order.items.length > 3 && (
+            <div className="product-preview-more">
+              +{order.items.length - 3} more
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="order-details">
         <div className="detail-item">
           <Package size={18} />
