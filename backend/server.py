@@ -1,70 +1,207 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Header
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, List
 import os
-import logging
+from dotenv import load_dotenv
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+import logging
+from supabase import create_client, Client
 import uuid
-from datetime import datetime, timezone
-
+from datetime import datetime
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Supabase connection
+supabase_url = os.environ['SUPABASE_URL']
+supabase_key = os.environ['SUPABASE_KEY']
+supabase: Client = create_client(supabase_url, supabase_key)
 
-# Create the main app without a prefix
-app = FastAPI()
+# Create the main app
+app = FastAPI(title="Repid Cart Delivery API")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+# Models
+class PinLoginRequest(BaseModel):
+    pin: str
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class PinLoginResponse(BaseModel):
+    success: bool
+    partner_id: Optional[int] = None
+    partner_name: Optional[str] = None
+    message: Optional[str] = None
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+class OrderUpdateRequest(BaseModel):
+    status: Optional[str] = None
+    delivery_partner_id: Optional[int] = None
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+class CompleteDeliveryRequest(BaseModel):
+    customer_pin: str
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+# Routes
+@api_router.post("/auth/pin-login", response_model=PinLoginResponse)
+async def pin_login(request: PinLoginRequest):
+    """Authenticate delivery partner with 4-digit PIN"""
+    try:
+        # Query delivery_partners table
+        response = supabase.table("delivery_partners").select("*").eq(
+            "pin", request.pin
+        ).eq("is_active", True).execute()
+        
+        if not response.data or len(response.data) == 0:
+            return PinLoginResponse(
+                success=False,
+                message="Invalid PIN or inactive account"
+            )
+        
+        partner = response.data[0]
+        return PinLoginResponse(
+            success=True,
+            partner_id=partner["id"],
+            partner_name=partner["name"],
+            message="Login successful"
+        )
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/orders")
+async def get_orders(status: Optional[str] = None, partner_id: Optional[int] = None):
+    """Get orders with optional filters"""
+    try:
+        query = supabase.table("orders").select("*")
+        
+        if status:
+            query = query.eq("status", status)
+        if partner_id:
+            query = query.eq("delivery_partner_id", partner_id)
+        
+        response = query.order("created_at", desc=True).execute()
+        return {"success": True, "orders": response.data}
+    except Exception as e:
+        logger.error(f"Error fetching orders: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.patch("/orders/{order_id}")
+async def update_order(order_id: int, request: OrderUpdateRequest):
+    """Update order status and/or delivery partner"""
+    try:
+        update_data = {}
+        if request.status:
+            update_data["status"] = request.status
+        if request.delivery_partner_id is not None:
+            update_data["delivery_partner_id"] = request.delivery_partner_id
+        
+        response = supabase.table("orders").update(
+            update_data
+        ).eq("id", order_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        return {"success": True, "order": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating order: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/orders/{order_id}/complete")
+async def complete_delivery(order_id: int, request: CompleteDeliveryRequest):
+    """Complete delivery with PIN verification"""
+    try:
+        # Get order
+        order_response = supabase.table("orders").select(
+            "*"
+        ).eq("id", order_id).execute()
+        
+        if not order_response.data:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        order = order_response.data[0]
+        
+        # Verify customer PIN
+        if order["delivery_pin"] != request.customer_pin:
+            return {"success": False, "message": "Invalid customer PIN"}
+        
+        # Update status to completed
+        update_response = supabase.table("orders").update({
+            "status": "completed"
+        }).eq("id", order_id).execute()
+        
+        return {"success": True, "order": update_response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error completing delivery: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/orders/{order_id}/upload-photo")
+async def upload_delivery_photo(order_id: int, file: UploadFile = File(...)):
+    """Upload delivery proof photo to Supabase Storage"""
+    try:
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file type. Only JPEG, PNG, and WebP allowed."
+            )
+        
+        # Read file content
+        file_content = await file.read()
+        
+        # Validate file size (5MB max)
+        if len(file_content) > 5 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail="File size exceeds 5MB limit"
+            )
+        
+        # Generate unique filename
+        file_extension = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+        unique_filename = f"order_{order_id}_{uuid.uuid4().hex[:8]}.{file_extension}"
+        file_path = f"deliveries/{unique_filename}"
+        
+        # Upload to Supabase Storage
+        storage_response = supabase.storage.from_("delivery-photos").upload(
+            path=file_path,
+            file=file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        # Get public URL
+        public_url = supabase.storage.from_("delivery-photos").get_public_url(file_path)
+        
+        # Update order with photo URL
+        update_response = supabase.table("orders").update({
+            "delivery_photo_url": public_url
+        }).eq("id", order_id).execute()
+        
+        return {
+            "success": True,
+            "photo_url": public_url,
+            "order": update_response.data[0] if update_response.data else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading photo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "Repid Cart Delivery API"}
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -76,14 +213,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
