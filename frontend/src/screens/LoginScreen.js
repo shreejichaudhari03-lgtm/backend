@@ -12,7 +12,7 @@ const LoginScreen = () => {
   const navigate = useNavigate();
 
   const handlePinChange = (e) => {
-    const value = e.target.value.replace(/\D/g, ''); // Only digits
+    const value = e.target.value.replace(/\D/g, '');
     if (value.length <= 4) {
       setPin(value);
       setError('');
@@ -36,10 +36,10 @@ const LoginScreen = () => {
       });
 
       if (response.data.success) {
-        // Store partner info in localStorage
         localStorage.setItem('partner_id', response.data.partner_id);
         localStorage.setItem('partner_name', response.data.partner_name);
-        navigate('/orders');
+        localStorage.setItem('partner_phone', response.data.partner_phone || '');
+        navigate('/dashboard');
       } else {
         setError(response.data.message || 'Invalid PIN');
       }

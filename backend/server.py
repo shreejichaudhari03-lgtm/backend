@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Header
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -8,7 +8,7 @@ from pathlib import Path
 import logging
 from supabase import create_client, Client
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -39,6 +39,7 @@ class PinLoginResponse(BaseModel):
     success: bool
     partner_id: Optional[int] = None
     partner_name: Optional[str] = None
+    partner_phone: Optional[str] = None
     message: Optional[str] = None
 
 class OrderUpdateRequest(BaseModel):
@@ -48,6 +49,9 @@ class OrderUpdateRequest(BaseModel):
 class CompleteDeliveryRequest(BaseModel):
     customer_pin: str
 
+class PartnerStatusUpdate(BaseModel):
+    is_active: bool
+
 # Routes
 @api_router.post("/auth/pin-login", response_model=PinLoginResponse)
 async def pin_login(request: PinLoginRequest):
@@ -56,12 +60,12 @@ async def pin_login(request: PinLoginRequest):
         # Query delivery_partners table
         response = supabase.table("delivery_partners").select("*").eq(
             "pin", request.pin
-        ).eq("is_active", True).execute()
+        ).execute()
         
         if not response.data or len(response.data) == 0:
             return PinLoginResponse(
                 success=False,
-                message="Invalid PIN or inactive account"
+                message="Invalid PIN"
             )
         
         partner = response.data[0]
@@ -69,6 +73,7 @@ async def pin_login(request: PinLoginRequest):
             success=True,
             partner_id=partner["id"],
             partner_name=partner["name"],
+            partner_phone=partner.get("phone"),
             message="Login successful"
         )
     except Exception as e:
@@ -76,7 +81,11 @@ async def pin_login(request: PinLoginRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/orders")
-async def get_orders(status: Optional[str] = None, partner_id: Optional[int] = None):
+async def get_orders(
+    status: Optional[str] = None,
+    partner_id: Optional[int] = None,
+    limit: Optional[int] = 100
+):
     """Get orders with optional filters"""
     try:
         query = supabase.table("orders").select("*")
@@ -86,10 +95,28 @@ async def get_orders(status: Optional[str] = None, partner_id: Optional[int] = N
         if partner_id:
             query = query.eq("delivery_partner_id", partner_id)
         
-        response = query.order("created_at", desc=True).execute()
+        response = query.order("created_at", desc=True).limit(limit).execute()
         return {"success": True, "orders": response.data}
     except Exception as e:
         logger.error(f"Error fetching orders: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/orders/{order_id}")
+async def get_order_details(order_id: int):
+    """Get detailed information about a specific order"""
+    try:
+        response = supabase.table("orders").select("*").eq(
+            "id", order_id
+        ).single().execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        return {"success": True, "order": response.data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching order details: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.patch("/orders/{order_id}")
@@ -116,6 +143,16 @@ async def update_order(order_id: int, request: OrderUpdateRequest):
         logger.error(f"Error updating order: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.post("/orders/{order_id}/reject")
+async def reject_order(order_id: int):
+    """Reject/skip an order"""
+    try:
+        # Simply return success - order stays in pending for other drivers
+        return {"success": True, "message": "Order skipped"}
+    except Exception as e:
+        logger.error(f"Error rejecting order: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.post("/orders/{order_id}/complete")
 async def complete_delivery(order_id: int, request: CompleteDeliveryRequest):
     """Complete delivery with PIN verification"""
@@ -131,7 +168,7 @@ async def complete_delivery(order_id: int, request: CompleteDeliveryRequest):
         order = order_response.data[0]
         
         # Verify customer PIN
-        if order["delivery_pin"] != request.customer_pin:
+        if order.get("delivery_pin") != request.customer_pin:
             return {"success": False, "message": "Invalid customer PIN"}
         
         # Update status to completed
@@ -197,6 +234,92 @@ async def upload_delivery_photo(order_id: int, file: UploadFile = File(...)):
         raise
     except Exception as e:
         logger.error(f"Error uploading photo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/partner/{partner_id}/stats")
+async def get_partner_stats(partner_id: int):
+    """Get partner statistics and earnings"""
+    try:
+        # Get all completed orders for this partner
+        completed_orders = supabase.table("orders").select(
+            "*"
+        ).eq("delivery_partner_id", partner_id).eq(
+            "status", "completed"
+        ).execute()
+        
+        total_deliveries = len(completed_orders.data) if completed_orders.data else 0
+        
+        # Calculate total earnings (sum of delivery_fee)
+        total_earnings = 0
+        today_earnings = 0
+        today = date.today().isoformat()
+        
+        if completed_orders.data:
+            for order in completed_orders.data:
+                delivery_fee = float(order.get("delivery_fee", 0))
+                total_earnings += delivery_fee
+                
+                # Check if order was completed today
+                order_date = order.get("created_at", "")[:10]
+                if order_date == today:
+                    today_earnings += delivery_fee
+        
+        # Get active orders count
+        active_orders = supabase.table("orders").select(
+            "id", count="exact"
+        ).eq("delivery_partner_id", partner_id).in_(
+            "status", ["shopping", "delivering"]
+        ).execute()
+        
+        active_count = active_orders.count if active_orders.count else 0
+        
+        return {
+            "success": True,
+            "stats": {
+                "total_deliveries": total_deliveries,
+                "total_earnings": round(total_earnings, 2),
+                "today_earnings": round(today_earnings, 2),
+                "active_orders": active_count
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error fetching partner stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/partner/{partner_id}")
+async def get_partner_profile(partner_id: int):
+    """Get partner profile information"""
+    try:
+        response = supabase.table("delivery_partners").select(
+            "*"
+        ).eq("id", partner_id).single().execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Partner not found")
+        
+        return {"success": True, "partner": response.data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching partner profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.patch("/partner/{partner_id}/status")
+async def update_partner_status(partner_id: int, request: PartnerStatusUpdate):
+    """Update partner online/offline status"""
+    try:
+        response = supabase.table("delivery_partners").update({
+            "is_active": request.is_active
+        }).eq("id", partner_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Partner not found")
+        
+        return {"success": True, "partner": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating partner status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/health")

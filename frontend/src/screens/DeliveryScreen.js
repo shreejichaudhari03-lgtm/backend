@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
 import axios from 'axios';
-import { MapPin, Camera, ArrowLeft, CheckCircle } from '@phosphor-icons/react';
+import { MapPin, Camera, ArrowLeft, CheckCircle, Phone, Copy } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -23,14 +23,8 @@ const DeliveryScreen = () => {
 
   const fetchOrderDetails = async () => {
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('id', orderId)
-        .single();
-
-      if (error) throw error;
-      setOrder(data);
+      const response = await axios.get(`${BACKEND_URL}/api/orders/${orderId}`);
+      setOrder(response.data.order);
     } catch (error) {
       console.error('Error fetching order:', error);
       alert('Failed to load order details');
@@ -51,14 +45,27 @@ const DeliveryScreen = () => {
     }
   };
 
+  const handleCopyAddress = () => {
+    if (order?.customer_address) {
+      navigator.clipboard.writeText(order.customer_address);
+      toast.success('Address copied to clipboard!');
+    }
+  };
+
+  const handleCallCustomer = () => {
+    if (order?.customer_phone) {
+      window.location.href = `tel:${order.customer_phone}`;
+    }
+  };
+
   const handleCompleteDelivery = async () => {
     if (customerPin.length !== 4) {
-      alert('Please enter the 4-digit customer PIN');
+      toast.error('Please enter the 4-digit customer PIN');
       return;
     }
 
     if (!photoFile) {
-      alert('Please take a delivery proof photo');
+      toast.error('Please take a delivery proof photo');
       return;
     }
 
@@ -90,14 +97,14 @@ const DeliveryScreen = () => {
       );
 
       if (completeResponse.data.success) {
-        alert('Delivery completed successfully!');
-        navigate('/orders');
+        toast.success('Delivery completed successfully!');
+        setTimeout(() => navigate('/dashboard'), 1500);
       } else {
-        alert(completeResponse.data.message || 'Invalid customer PIN');
+        toast.error(completeResponse.data.message || 'Invalid customer PIN');
       }
     } catch (error) {
       console.error('Error completing delivery:', error);
-      alert('Failed to complete delivery. Please try again.');
+      toast.error('Failed to complete delivery. Please try again.');
     } finally {
       setCompleting(false);
     }
@@ -127,21 +134,42 @@ const DeliveryScreen = () => {
     <div className="screen-container">
       <div className="top-nav">
         <div className="nav-content">
-          <button onClick={() => navigate('/orders')} className="btn-icon">
+          <button onClick={() => navigate('/dashboard')} className="btn-icon">
             <ArrowLeft size={24} weight="bold" />
           </button>
           <h3>Delivery in Progress</h3>
-          <div style={{ width: '40px' }}></div>
+          <button 
+            onClick={handleCallCustomer} 
+            className="btn-icon"
+            data-testid="call-customer-button"
+          >
+            <Phone size={24} weight="bold" />
+          </button>
         </div>
       </div>
 
       <div className="screen-content">
         <div className="delivery-address-block" data-testid="delivery-address-block">
           <MapPin size={32} weight="duotone" className="address-icon" />
-          <div>
+          <div className="address-content">
             <h2>Delivery Address</h2>
             <p className="address-text">{order.customer_address}</p>
             <p className="customer-name">{order.customer_name}</p>
+            <button onClick={handleCopyAddress} className="copy-btn">
+              <Copy size={16} />
+              Copy Address
+            </button>
+          </div>
+        </div>
+
+        <div className="order-summary">
+          <div className="summary-row">
+            <span>Order Total</span>
+            <strong>${order.total?.toFixed(2)}</strong>
+          </div>
+          <div className="summary-row">
+            <span>Your Earning</span>
+            <strong className="earning">${order.delivery_fee?.toFixed(2)}</strong>
           </div>
         </div>
 
@@ -180,6 +208,7 @@ const DeliveryScreen = () => {
                 onClick={() => fileInputRef.current?.click()}
                 className="btn-secondary retake-btn"
               >
+                <Camera size={20} />
                 Retake Photo
               </button>
             </div>
