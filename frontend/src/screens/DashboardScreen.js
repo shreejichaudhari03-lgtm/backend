@@ -77,11 +77,21 @@ const DashboardScreen = () => {
       ];
       setActiveOrders(active);
 
-      // Fetch completed orders
+      // Fetch completed orders (last 24 hours only)
       const completedRes = await axios.get(
-        `${BACKEND_URL}/api/orders?status=completed&partner_id=${partnerId}&limit=20`
+        `${BACKEND_URL}/api/orders?status=completed&partner_id=${partnerId}&limit=50`
       );
-      setCompletedOrders(completedRes.data.orders || []);
+      
+      // Filter to show only orders from last 24 hours
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
+      const recentCompleted = (completedRes.data.orders || []).filter(order => {
+        const orderDate = new Date(order.created_at);
+        return orderDate >= twentyFourHoursAgo;
+      });
+      
+      setCompletedOrders(recentCompleted);
 
       // Fetch skipped orders
       const skippedRes = await axios.get(
@@ -313,6 +323,17 @@ const DashboardScreen = () => {
           <CheckCircle size={18} weight="fill" className="check-icon" />
           <span>Completed {new Date(order.created_at).toLocaleDateString()}</span>
         </div>
+      )}
+
+      {/* Make completed orders clickable */}
+      {type === 'completed' && (
+        <button
+          onClick={() => navigate(`/completed/${order.id}`)}
+          className="btn-secondary"
+          data-testid={`view-completed-button-${order.id}`}
+        >
+          View Details
+        </button>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import ShoppingScreen from './screens/ShoppingScreen';
 import DeliveryScreen from './screens/DeliveryScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import CompletedOrderScreen from './screens/CompletedOrderScreen';
 import '@/App.css';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route path="/shopping/:orderId" element={<ShoppingScreen />} />
           <Route path="/delivery/:orderId" element={<DeliveryScreen />} />
           <Route path="/profile" element={<ProfileScreen />} />
+          <Route path="/completed/:orderId" element={<CompletedOrderScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
