@@ -81,27 +81,36 @@ const DashboardScreen = () => {
   };
 
   const setupRealtimeSubscription = () => {
-    const channel = supabase
-      .channel('orders-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders'
-        },
-        (payload) => {
-          console.log('Order change detected:', payload);
-          const partnerId = localStorage.getItem('partner_id');
-          fetchAllOrders(partnerId);
-          fetchStats(partnerId);
-        }
-      )
-      .subscribe();
+    try {
+      const channel = supabase
+        .channel('orders-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders'
+          },
+          (payload) => {
+            console.log('Order change detected:', payload);
+            const partnerId = localStorage.getItem('partner_id');
+            fetchAllOrders(partnerId);
+            fetchStats(partnerId);
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('✓ Realtime connected');
+          }
+        });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (error) {
+      console.error('Realtime subscription error:', error);
+      // Continue without realtime - will still work, just need manual refresh
+    }
   };
 
   const handleAcceptOrder = async (orderId) => {
