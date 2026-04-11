@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { MapPin, Camera, ArrowLeft, CheckCircle, Phone, Copy } from '@phosphor-icons/react';
 import { toast } from 'sonner';
@@ -8,6 +8,8 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 const DeliveryScreen = () => {
   const { orderId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isScheduled = searchParams.get('source') === 'scheduled' || localStorage.getItem(`scheduled_order_${orderId}`) === 'true';
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [customerPin, setCustomerPin] = useState('');
@@ -23,7 +25,10 @@ const DeliveryScreen = () => {
 
   const fetchOrderDetails = async () => {
     try {
-      const response = await axios.get(`${BACKEND_URL}/api/orders/${orderId}`);
+      const endpoint = isScheduled 
+        ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
+        : `${BACKEND_URL}/api/orders/${orderId}`;
+      const response = await axios.get(endpoint);
       setOrder(response.data.order);
     } catch (error) {
       console.error('Error fetching order:', error);
@@ -67,12 +72,13 @@ const DeliveryScreen = () => {
     setCompleting(true);
 
     try {
-      // Upload photo first
+      // Upload photo first - pass table param for scheduled orders
       const formData = new FormData();
       formData.append('file', photoFile);
 
+      const tableParam = isScheduled ? '?table=scheduled_orders' : '';
       const uploadResponse = await axios.post(
-        `${BACKEND_URL}/api/orders/${orderId}/upload-photo`,
+        `${BACKEND_URL}/api/orders/${orderId}/upload-photo${tableParam}`,
         formData,
         {
           headers: {
@@ -85,15 +91,19 @@ const DeliveryScreen = () => {
         throw new Error('Photo upload failed');
       }
 
-      // Complete delivery (no PIN needed)
+      // Complete delivery on the correct table
+      const endpoint = isScheduled 
+        ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
+        : `${BACKEND_URL}/api/orders/${orderId}`;
+      
       const completeResponse = await axios.patch(
-        `${BACKEND_URL}/api/orders/${orderId}`,
+        endpoint,
         { status: 'completed' }
       );
 
       if (completeResponse.data.success) {
-        // Remove working flag
         localStorage.removeItem(`working_on_${orderId}`);
+        localStorage.removeItem(`scheduled_order_${orderId}`);
         
         toast.success('Delivery completed successfully!');
         setTimeout(() => navigate('/dashboard'), 1500);

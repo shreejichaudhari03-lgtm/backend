@@ -19,11 +19,17 @@ const CompletedOrderScreen = () => {
 
   const fetchOrderDetails = async () => {
     try {
+      // Try regular orders first
       const response = await axios.get(`${BACKEND_URL}/api/orders/${orderId}`);
       setOrder(response.data.order);
     } catch (error) {
-      console.error('Error fetching order:', error);
-      alert('Failed to load order details');
+      // Fallback: try scheduled_orders table
+      try {
+        const scheduledRes = await axios.get(`${BACKEND_URL}/api/scheduled-orders/${orderId}`);
+        setOrder(scheduledRes.data.order);
+      } catch (err) {
+        console.error('Error fetching order:', err);
+      }
     } finally {
       setLoading(false);
     }

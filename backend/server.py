@@ -184,7 +184,7 @@ async def complete_delivery(order_id: str, request: CompleteDeliveryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/orders/{order_id}/upload-photo")
-async def upload_delivery_photo(order_id: str, file: UploadFile = File(...)):
+async def upload_delivery_photo(order_id: str, table: Optional[str] = "orders", file: UploadFile = File(...)):
     """Upload delivery proof photo to Supabase Storage"""
     try:
         # Validate file type
@@ -229,8 +229,9 @@ async def upload_delivery_photo(order_id: str, file: UploadFile = File(...)):
             public_url = f"data:{file.content_type};base64,{base64_image}"
             logger.info("Using base64 fallback for photo storage")
         
-        # Update order with photo URL
-        update_response = supabase.table("orders").update({
+        # Update the correct table with photo URL
+        target_table = "scheduled_orders" if table == "scheduled_orders" else "orders"
+        update_response = supabase.table(target_table).update({
             "delivery_photo_url": public_url
         }).eq("id", order_id).execute()
         
@@ -334,23 +335,70 @@ async def update_partner_status(partner_id: str, request: PartnerStatusUpdate):
 @api_router.get("/scheduled-orders")
 async def get_scheduled_orders(
     date: Optional[str] = None,
-    status: Optional[str] = None
+    status: Optional[str] = None,
+    partner_id: Optional[str] = None
 ):
-    """Get scheduled orders for a specific date"""
+    """Get scheduled orders from today onwards"""
     try:
         query = supabase.table("scheduled_orders").select("*")
         
+        # Show today and future scheduled orders (gte = greater than or equal)
         if date:
-            query = query.eq("scheduled_date", date)
+            query = query.gte("scheduled_date", date)
         if status:
             query = query.eq("status", status)
+        if partner_id:
+            query = query.eq("delivery_partner_id", partner_id)
         
-        response = query.order("created_at", desc=True).execute()
+        response = query.order("scheduled_date", desc=False).execute()
         return {"success": True, "orders": response.data}
     except Exception as e:
         logger.error(f"Error fetching scheduled orders: {e}")
         # Return empty if table doesn't exist yet
         return {"success": True, "orders": []}
+
+@api_router.patch("/scheduled-orders/{order_id}")
+async def update_scheduled_order(order_id: str, request: OrderUpdateRequest):
+    """Update scheduled order status and/or delivery partner"""
+    try:
+        update_data = {}
+        if request.status:
+            update_data["status"] = request.status
+        if request.delivery_partner_id is not None:
+            update_data["delivery_partner_id"] = request.delivery_partner_id
+        
+        response = supabase.table("scheduled_orders").update(
+            update_data
+        ).eq("id", order_id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Scheduled order not found")
+        
+        return {"success": True, "order": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating scheduled order: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/scheduled-orders/{order_id}")
+async def get_scheduled_order_details(order_id: str):
+    """Get detailed information about a specific scheduled order"""
+    try:
+        response = supabase.table("scheduled_orders").select("*").eq(
+            "id", order_id
+        ).single().execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Scheduled order not found")
+        
+        return {"success": True, "order": response.data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching scheduled order details: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @api_router.get("/health")
 async def health_check():

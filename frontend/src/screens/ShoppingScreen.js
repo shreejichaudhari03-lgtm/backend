@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
 import { CheckCircle, Circle, ArrowLeft, Phone } from '@phosphor-icons/react';
@@ -9,6 +9,8 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
 const ShoppingScreen = () => {
   const { orderId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isScheduled = searchParams.get('source') === 'scheduled' || localStorage.getItem(`scheduled_order_${orderId}`) === 'true';
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [checkedItems, setCheckedItems] = useState(new Set());
@@ -22,7 +24,10 @@ const ShoppingScreen = () => {
 
   const fetchOrderDetails = async () => {
     try {
-      const response = await axios.get(`${BACKEND_URL}/api/orders/${orderId}`);
+      const endpoint = isScheduled 
+        ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
+        : `${BACKEND_URL}/api/orders/${orderId}`;
+      const response = await axios.get(endpoint);
       setOrder(response.data.order);
     } catch (error) {
       console.error('Error fetching order:', error);
@@ -71,16 +76,19 @@ const ShoppingScreen = () => {
     const partnerId = localStorage.getItem('partner_id');
     
     try {
-      // NOW change the order status to 'delivering' and assign to this driver
-      await axios.patch(`${BACKEND_URL}/api/orders/${orderId}`, {
+      // Update status on the correct table
+      const endpoint = isScheduled 
+        ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
+        : `${BACKEND_URL}/api/orders/${orderId}`;
+      
+      await axios.patch(endpoint, {
         status: 'delivering',
         delivery_partner_id: partnerId
       });
       
-      // Remove the working flag since it's now officially assigned
       localStorage.removeItem(`working_on_${orderId}`);
       
-      navigate(`/delivery/${orderId}`);
+      navigate(`/delivery/${orderId}${isScheduled ? '?source=scheduled' : ''}`);
     } catch (error) {
       console.error('Error updating order:', error);
       alert('Failed to start delivery. Please try again.');

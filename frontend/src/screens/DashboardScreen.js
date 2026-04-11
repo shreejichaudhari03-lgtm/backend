@@ -76,21 +76,19 @@ const DashboardScreen = () => {
       // Get today's date in ISO format (YYYY-MM-DD)
       const today = new Date().toISOString().split('T')[0];
 
-      // Fetch all in parallel for speed
-      const [availableRes, completedRes, skippedRes] = await Promise.all([
+      // Fetch all in parallel for speed (including scheduled orders)
+      const [availableRes, completedRes, skippedRes, scheduledRes] = await Promise.all([
         axios.get(`${BACKEND_URL}/api/orders?status=pending`),
         axios.get(`${BACKEND_URL}/api/orders?status=completed&partner_id=${partnerId}&limit=50`),
-        axios.get(`${BACKEND_URL}/api/orders?status=skipped&partner_id=${partnerId}`)
+        axios.get(`${BACKEND_URL}/api/orders?status=skipped&partner_id=${partnerId}`),
+        axios.get(`${BACKEND_URL}/api/scheduled-orders?date=${today}`).catch(() => ({ data: { orders: [] } }))
       ]);
 
-      // Fetch scheduled orders from scheduled_orders table
-      let scheduledData = [];
-      try {
-        const scheduledRes = await axios.get(`${BACKEND_URL}/api/scheduled-orders?date=${today}&status=pending`);
-        scheduledData = scheduledRes.data.orders || [];
-      } catch (err) {
-        console.warn('Could not fetch scheduled orders:', err);
-      }
+      const allScheduled = scheduledRes.data.orders || [];
+      // Schedules tab: only non-completed
+      const scheduledData = allScheduled.filter(o => o.status !== 'completed');
+      // Completed scheduled orders (last 24 hours)
+      const completedScheduled = allScheduled.filter(o => o.status === 'completed');
 
       const available = availableRes.data.orders || [];
       
@@ -101,18 +99,28 @@ const DashboardScreen = () => {
         const orderDate = new Date(order.created_at);
         return orderDate >= twentyFourHoursAgo;
       });
+      const recentCompletedScheduled = completedScheduled.filter(order => {
+        const orderDate = new Date(order.created_at);
+        return orderDate >= twentyFourHoursAgo;
+      });
       
+      // Merge completed from both tables, mark scheduled ones
+      const allCompleted = [
+        ...recentCompleted,
+        ...recentCompletedScheduled.map(o => ({ ...o, _source: 'scheduled' }))
+      ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
       const skipped = skippedRes.data.orders || [];
 
       setAvailableOrders(available);
       setScheduledOrders(scheduledData);
-      setCompletedOrders(recentCompleted);
+      setCompletedOrders(allCompleted);
       setSkippedOrders(skipped);
       
       cacheManager.set(cacheKey, {
         available,
         scheduled: scheduledData,
-        completed: recentCompleted,
+        completed: allCompleted,
         skipped
       });
       
@@ -134,78 +142,86 @@ const DashboardScreen = () => {
 
   const setupRealtimeSubscription = () => {
     try {
-      console.log('🔄 Setting up Realtime subscription for orders...');
+      console.log('Setting up Realtime subscriptions for orders and scheduled_orders...');
       
       const channel = supabase
-        .channel('orders-realtime-' + Date.now()) // Unique channel name
+        .channel('all-orders-realtime-' + Date.now())
         .on(
           'postgres_changes',
           {
-            event: '*', // Listen to all events: INSERT, UPDATE, DELETE
+            event: '*',
             schema: 'public',
             table: 'orders'
           },
           (payload) => {
-            console.log('📦 Order change detected:', payload.eventType);
-            console.log('Order data:', payload.new || payload.old);
-            
-            // Refresh orders and stats when any change occurs
+            console.log('Order change detected:', payload.eventType);
             const partnerId = localStorage.getItem('partner_id');
             if (partnerId) {
-              console.log('🔄 Refreshing orders and stats...');
               fetchAllOrders(partnerId);
               fetchStats(partnerId);
             }
           }
         )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'scheduled_orders'
+          },
+          (payload) => {
+            console.log('Scheduled order change detected:', payload.eventType);
+            const partnerId = localStorage.getItem('partner_id');
+            if (partnerId) {
+              fetchAllOrders(partnerId);
+            }
+          }
+        )
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
-            console.log('✅ Realtime connected! Orders will update automatically.');
+            console.log('Realtime connected for orders + scheduled_orders');
           } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ Realtime connection error. Check Supabase settings.');
-          } else if (status === 'TIMED_OUT') {
-            console.warn('⚠️ Realtime connection timed out.');
-          } else {
-            console.log('Realtime status:', status);
+            console.error('Realtime connection error');
           }
         });
 
-      // Return the channel for cleanup
       return channel;
     } catch (error) {
-      console.error('❌ Realtime subscription error:', error);
+      console.error('Realtime subscription error:', error);
       return null;
     }
   };
 
-  const handleAcceptOrder = async (orderId) => {
+  const handleAcceptOrder = async (orderId, isScheduled = false) => {
     const partnerId = localStorage.getItem('partner_id');
     
     try {
-      // Don't change status yet - just navigate to shopping
-      // Order stays in Available (pending) until delivery starts
-      
       // Store that this driver is working on this order
       localStorage.setItem(`working_on_${orderId}`, partnerId);
+      if (isScheduled) {
+        localStorage.setItem(`scheduled_order_${orderId}`, 'true');
+      }
       
-      navigate(`/shopping/${orderId}`);
+      navigate(`/shopping/${orderId}${isScheduled ? '?source=scheduled' : ''}`);
     } catch (error) {
       console.error('Error accepting order:', error);
       alert('Failed to accept order. Please try again.');
     }
   };
 
-  const handleRejectOrder = async (orderId) => {
+  const handleRejectOrder = async (orderId, isScheduled = false) => {
     const partnerId = localStorage.getItem('partner_id');
     
     try {
-      // Mark order as skipped for this driver
-      await axios.patch(`${BACKEND_URL}/api/orders/${orderId}`, {
+      const endpoint = isScheduled 
+        ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
+        : `${BACKEND_URL}/api/orders/${orderId}`;
+      
+      await axios.patch(endpoint, {
         status: 'skipped',
         delivery_partner_id: partnerId
       });
       
-      // Remove working flag
       localStorage.removeItem(`working_on_${orderId}`);
       
       toast.success('Order skipped');
@@ -237,7 +253,10 @@ const DashboardScreen = () => {
     return 0;
   };
 
-  const renderOrderCard = (order, type) => (
+  const renderOrderCard = (order, type) => {
+    const isScheduled = type === 'active';
+    
+    return (
     <div key={order.id} className="order-card" data-testid={`order-card-${order.id}`}>
       <div className="order-header">
         <span className="order-number">Order #{order.order_number}</span>
@@ -245,6 +264,19 @@ const DashboardScreen = () => {
           {order.status}
         </span>
       </div>
+
+      {/* Show scheduled date and delivery window for scheduled orders */}
+      {isScheduled && order.scheduled_date && (
+        <div className="scheduled-info">
+          <div className="info-row">
+            <Clock size={18} weight="bold" />
+            <span>{new Date(order.scheduled_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+            {order.delivery_window && (
+              <span className="delivery-window-badge">{order.delivery_window}</span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="order-info">
         <div className="info-row">
@@ -306,10 +338,10 @@ const DashboardScreen = () => {
         )}
       </div>
 
-      {type === 'available' && (
+      {(type === 'available' || type === 'active') && (
         <div className="order-actions">
           <button
-            onClick={() => handleRejectOrder(order.id)}
+            onClick={() => handleRejectOrder(order.id, isScheduled)}
             className="btn-secondary-sm"
             data-testid={`reject-order-button-${order.id}`}
           >
@@ -317,27 +349,7 @@ const DashboardScreen = () => {
             Skip
           </button>
           <button
-            onClick={() => handleAcceptOrder(order.id)}
-            className="btn-primary-sm"
-            data-testid={`accept-order-button-${order.id}`}
-          >
-            {localStorage.getItem(`working_on_${order.id}`) ? 'Resume Order' : 'Accept Order'}
-          </button>
-        </div>
-      )}
-
-      {type === 'active' && (
-        <div className="order-actions">
-          <button
-            onClick={() => handleRejectOrder(order.id)}
-            className="btn-secondary-sm"
-            data-testid={`reject-order-button-${order.id}`}
-          >
-            <X size={18} weight="bold" />
-            Skip
-          </button>
-          <button
-            onClick={() => handleAcceptOrder(order.id)}
+            onClick={() => handleAcceptOrder(order.id, isScheduled)}
             className="btn-primary-sm"
             data-testid={`accept-order-button-${order.id}`}
           >
@@ -374,7 +386,8 @@ const DashboardScreen = () => {
         </button>
       )}
     </div>
-  );
+    );
+  };
 
   const renderEmptyState = (type) => {
     const messages = {
