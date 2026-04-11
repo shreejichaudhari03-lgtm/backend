@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
@@ -17,6 +17,7 @@ import { OrderListSkeleton } from '../components/OrderSkeleton';
 import { cacheManager } from '../utils/cache';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const POLL_INTERVAL = 15000; // Auto-refresh every 15 seconds
 
 const DashboardScreen = () => {
   const [activeTab, setActiveTab] = useState('available');
@@ -27,9 +28,19 @@ const DashboardScreen = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [partnerName, setPartnerName] = useState('');
-  const [realtimeChannel, setRealtimeChannel] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const channelRef = useRef(null);
+  const pollIntervalRef = useRef(null);
   const navigate = useNavigate();
+
+  // Refresh function that can be called from anywhere
+  const refreshOrders = useCallback(() => {
+    const partnerId = localStorage.getItem('partner_id');
+    if (partnerId) {
+      fetchAllOrders(partnerId);
+      fetchStats(partnerId);
+    }
+  }, []);
 
   useEffect(() => {
     const partnerId = localStorage.getItem('partner_id');
@@ -44,20 +55,45 @@ const DashboardScreen = () => {
     fetchAllOrders(partnerId);
     fetchStats(partnerId);
     
-    // Setup realtime subscription only once
-    if (!realtimeChannel) {
-      const channel = setupRealtimeSubscription();
-      setRealtimeChannel(channel);
-    }
-    
-    // Cleanup on unmount
+    // Setup realtime subscription
+    const channel = supabase
+      .channel('all-orders-realtime-' + Date.now())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        const pid = localStorage.getItem('partner_id');
+        if (pid) { fetchAllOrders(pid); fetchStats(pid); }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scheduled_orders' }, () => {
+        const pid = localStorage.getItem('partner_id');
+        if (pid) { fetchAllOrders(pid); }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime connected');
+        }
+      });
+    channelRef.current = channel;
+
+    // Polling fallback: auto-refresh every 15 seconds
+    pollIntervalRef.current = setInterval(() => {
+      const pid = localStorage.getItem('partner_id');
+      if (pid) {
+        fetchAllOrders(pid);
+        fetchStats(pid);
+      }
+    }, POLL_INTERVAL);
+
+    // Cleanup
     return () => {
-      if (realtimeChannel) {
-        console.log('🔌 Cleaning up Realtime subscription');
-        supabase.removeChannel(realtimeChannel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
     };
-  }, [navigate]); // Remove realtimeChannel from dependencies to prevent re-subscription
+  }, [navigate]);
 
   const fetchAllOrders = async (partnerId) => {
     try {
@@ -136,58 +172,6 @@ const DashboardScreen = () => {
       setStats(response.data.stats);
     } catch (error) {
       console.error('Error fetching stats:', error);
-    }
-  };
-
-  const setupRealtimeSubscription = () => {
-    try {
-      console.log('Setting up Realtime subscriptions for orders and scheduled_orders...');
-      
-      const channel = supabase
-        .channel('all-orders-realtime-' + Date.now())
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'orders'
-          },
-          (payload) => {
-            console.log('Order change detected:', payload.eventType);
-            const partnerId = localStorage.getItem('partner_id');
-            if (partnerId) {
-              fetchAllOrders(partnerId);
-              fetchStats(partnerId);
-            }
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'scheduled_orders'
-          },
-          (payload) => {
-            console.log('Scheduled order change detected:', payload.eventType);
-            const partnerId = localStorage.getItem('partner_id');
-            if (partnerId) {
-              fetchAllOrders(partnerId);
-            }
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log('Realtime connected for orders + scheduled_orders');
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('Realtime connection error');
-          }
-        });
-
-      return channel;
-    } catch (error) {
-      console.error('Realtime subscription error:', error);
-      return null;
     }
   };
 

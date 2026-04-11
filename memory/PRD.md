@@ -24,6 +24,7 @@ Build a delivery partner app for Repid Cart that connects to an existing Supabas
 - [x] PIN Login flow
 - [x] Dashboard with 4 tabs (Available, Schedules, Skipped, Completed)
 - [x] Realtime WebSocket subscriptions for both `orders` and `scheduled_orders` tables
+- [x] **Auto-refresh polling every 15 seconds** — orders appear without manual refresh
 - [x] Shopping checklist with item cancellation and undo
 - [x] Delivery screen with proof photo upload
 - [x] Completed orders (24-hour persistence)
