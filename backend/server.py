@@ -88,7 +88,10 @@ async def get_orders(
 ):
     """Get orders with optional filters"""
     try:
-        query = supabase.table("orders").select("*")
+        # Select specific columns, excluding delivery_photo_url to avoid huge base64 payloads
+        query = supabase.table("orders").select(
+            "id,order_number,customer_name,customer_phone,customer_address,items,subtotal,delivery_fee,total,status,delivery_partner_id,delivery_pin,created_at"
+        )
         
         if status:
             query = query.eq("status", status)
@@ -340,7 +343,9 @@ async def get_scheduled_orders(
 ):
     """Get scheduled orders from today onwards"""
     try:
-        query = supabase.table("scheduled_orders").select("*")
+        query = supabase.table("scheduled_orders").select(
+            "id,order_number,customer_name,customer_phone,customer_address,items,subtotal,delivery_fee,total,scheduled_date,delivery_window,status,delivery_partner_id,delivery_pin,created_at,delivered_at"
+        )
         
         # Show today and future scheduled orders (gte = greater than or equal)
         if date:

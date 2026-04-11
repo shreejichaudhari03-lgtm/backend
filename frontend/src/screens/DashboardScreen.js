@@ -75,6 +75,7 @@ const DashboardScreen = () => {
 
       // Get today's date in ISO format (YYYY-MM-DD)
       const today = new Date().toISOString().split('T')[0];
+      console.log('Fetching all orders...');
 
       // Fetch all in parallel for speed (including scheduled orders)
       const [availableRes, completedRes, skippedRes, scheduledRes] = await Promise.all([
@@ -83,7 +84,6 @@ const DashboardScreen = () => {
         axios.get(`${BACKEND_URL}/api/orders?status=skipped&partner_id=${partnerId}`),
         axios.get(`${BACKEND_URL}/api/scheduled-orders?date=${today}`).catch(() => ({ data: { orders: [] } }))
       ]);
-
       const allScheduled = scheduledRes.data.orders || [];
       // Schedules tab: only non-completed
       const scheduledData = allScheduled.filter(o => o.status !== 'completed');
@@ -109,7 +109,6 @@ const DashboardScreen = () => {
         ...recentCompleted,
         ...recentCompletedScheduled.map(o => ({ ...o, _source: 'scheduled' }))
       ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
       const skipped = skippedRes.data.orders || [];
 
       setAvailableOrders(available);
