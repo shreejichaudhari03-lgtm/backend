@@ -13,6 +13,8 @@ import {
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import ImageModal from '../components/ImageModal';
+import { OrderListSkeleton } from '../components/OrderSkeleton';
+import { cacheManager } from '../utils/cache';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -59,48 +61,63 @@ const DashboardScreen = () => {
 
   const fetchAllOrders = async (partnerId) => {
     try {
-      // Fetch available (pending) orders
-      const availableRes = await axios.get(`${BACKEND_URL}/api/orders?status=pending`);
-      setAvailableOrders(availableRes.data.orders || []);
-
-      // Fetch active orders (shopping or delivering)
-      const shoppingRes = await axios.get(
-        `${BACKEND_URL}/api/orders?status=shopping&partner_id=${partnerId}`
-      );
-      const deliveringRes = await axios.get(
-        `${BACKEND_URL}/api/orders?status=delivering&partner_id=${partnerId}`
-      );
+      // Check cache first for faster loading
+      const cacheKey = `orders_${partnerId}`;
+      const cached = cacheManager.get(cacheKey);
       
+      if (cached) {
+        // Use cached data immediately
+        setAvailableOrders(cached.available || []);
+        setActiveOrders(cached.active || []);
+        setCompletedOrders(cached.completed || []);
+        setSkippedOrders(cached.skipped || []);
+        setLoading(false);
+        
+        // Still fetch fresh data in background
+      }
+
+      // Fetch all in parallel for speed
+      const [availableRes, shoppingRes, deliveringRes, completedRes, skippedRes] = await Promise.all([
+        axios.get(`${BACKEND_URL}/api/orders?status=pending`),
+        axios.get(`${BACKEND_URL}/api/orders?status=shopping&partner_id=${partnerId}`),
+        axios.get(`${BACKEND_URL}/api/orders?status=delivering&partner_id=${partnerId}`),
+        axios.get(`${BACKEND_URL}/api/orders?status=completed&partner_id=${partnerId}&limit=50`),
+        axios.get(`${BACKEND_URL}/api/orders?status=skipped&partner_id=${partnerId}`)
+      ]);
+
+      const available = availableRes.data.orders || [];
       const active = [
         ...(shoppingRes.data.orders || []),
         ...(deliveringRes.data.orders || [])
       ];
-      setActiveOrders(active);
-
-      // Fetch completed orders (last 24 hours only)
-      const completedRes = await axios.get(
-        `${BACKEND_URL}/api/orders?status=completed&partner_id=${partnerId}&limit=50`
-      );
       
-      // Filter to show only orders from last 24 hours
+      // Filter completed orders to last 24 hours
       const now = new Date();
       const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      
       const recentCompleted = (completedRes.data.orders || []).filter(order => {
         const orderDate = new Date(order.created_at);
         return orderDate >= twentyFourHoursAgo;
       });
       
-      setCompletedOrders(recentCompleted);
+      const skipped = skippedRes.data.orders || [];
 
-      // Fetch skipped orders
-      const skippedRes = await axios.get(
-        `${BACKEND_URL}/api/orders?status=skipped&partner_id=${partnerId}`
-      );
-      setSkippedOrders(skippedRes.data.orders || []);
+      // Update state
+      setAvailableOrders(available);
+      setActiveOrders(active);
+      setCompletedOrders(recentCompleted);
+      setSkippedOrders(skipped);
+      
+      // Cache for next time
+      cacheManager.set(cacheKey, {
+        available,
+        active,
+        completed: recentCompleted,
+        skipped
+      });
+      
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching orders:', error);
-    } finally {
       setLoading(false);
     }
   };
@@ -251,6 +268,7 @@ const DashboardScreen = () => {
                   className="product-preview-image"
                   onClick={() => setSelectedImage(item.image || item.image_url)}
                   style={{ cursor: 'pointer' }}
+                  loading="lazy"
                   onError={(e) => {
                     e.target.style.display = 'none';
                   }}
@@ -461,7 +479,7 @@ const DashboardScreen = () => {
 
       <div className="screen-content">
         {loading ? (
-          <div className="loading-state">Loading orders...</div>
+          <OrderListSkeleton />
         ) : currentOrders.length === 0 ? (
           renderEmptyState(activeTab)
         ) : (
