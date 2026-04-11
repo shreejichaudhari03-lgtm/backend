@@ -392,7 +392,7 @@ async def get_scheduled_order_details(order_id: str):
     try:
         response = supabase.table("scheduled_orders").select("*").eq(
             "id", order_id
-        ).single().execute()
+        ).maybe_single().execute()
         
         if not response.data:
             raise HTTPException(status_code=404, detail="Scheduled order not found")
@@ -402,7 +402,7 @@ async def get_scheduled_order_details(order_id: str):
         raise
     except Exception as e:
         logger.error(f"Error fetching scheduled order details: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail="Scheduled order not found")
 
 
 @api_router.get("/health")
