@@ -331,6 +331,27 @@ async def update_partner_status(partner_id: str, request: PartnerStatusUpdate):
         logger.error(f"Error updating partner status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.get("/scheduled-orders")
+async def get_scheduled_orders(
+    date: Optional[str] = None,
+    status: Optional[str] = None
+):
+    """Get scheduled orders for a specific date"""
+    try:
+        query = supabase.table("scheduled_orders").select("*")
+        
+        if date:
+            query = query.eq("scheduled_date", date)
+        if status:
+            query = query.eq("status", status)
+        
+        response = query.order("created_at", desc=True).execute()
+        return {"success": True, "orders": response.data}
+    except Exception as e:
+        logger.error(f"Error fetching scheduled orders: {e}")
+        # Return empty if table doesn't exist yet
+        return {"success": True, "orders": []}
+
 @api_router.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "Repid Cart Delivery API"}

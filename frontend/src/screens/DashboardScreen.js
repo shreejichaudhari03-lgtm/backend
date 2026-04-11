@@ -21,7 +21,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const DashboardScreen = () => {
   const [activeTab, setActiveTab] = useState('available');
   const [availableOrders, setAvailableOrders] = useState([]);
-  const [activeOrders, setActiveOrders] = useState([]);
+  const [scheduledOrders, setScheduledOrders] = useState([]);
   const [completedOrders, setCompletedOrders] = useState([]);
   const [skippedOrders, setSkippedOrders] = useState([]);
   const [stats, setStats] = useState(null);
@@ -66,30 +66,33 @@ const DashboardScreen = () => {
       const cached = cacheManager.get(cacheKey);
       
       if (cached) {
-        // Use cached data immediately
         setAvailableOrders(cached.available || []);
-        setActiveOrders(cached.active || []);
+        setScheduledOrders(cached.scheduled || []);
         setCompletedOrders(cached.completed || []);
         setSkippedOrders(cached.skipped || []);
         setLoading(false);
-        
-        // Still fetch fresh data in background
       }
 
+      // Get today's date in ISO format (YYYY-MM-DD)
+      const today = new Date().toISOString().split('T')[0];
+
       // Fetch all in parallel for speed
-      const [availableRes, shoppingRes, deliveringRes, completedRes, skippedRes] = await Promise.all([
+      const [availableRes, completedRes, skippedRes] = await Promise.all([
         axios.get(`${BACKEND_URL}/api/orders?status=pending`),
-        axios.get(`${BACKEND_URL}/api/orders?status=shopping&partner_id=${partnerId}`),
-        axios.get(`${BACKEND_URL}/api/orders?status=delivering&partner_id=${partnerId}`),
         axios.get(`${BACKEND_URL}/api/orders?status=completed&partner_id=${partnerId}&limit=50`),
         axios.get(`${BACKEND_URL}/api/orders?status=skipped&partner_id=${partnerId}`)
       ]);
 
+      // Fetch scheduled orders from scheduled_orders table
+      let scheduledData = [];
+      try {
+        const scheduledRes = await axios.get(`${BACKEND_URL}/api/scheduled-orders?date=${today}&status=pending`);
+        scheduledData = scheduledRes.data.orders || [];
+      } catch (err) {
+        console.warn('Could not fetch scheduled orders:', err);
+      }
+
       const available = availableRes.data.orders || [];
-      const active = [
-        ...(shoppingRes.data.orders || []),
-        ...(deliveringRes.data.orders || [])
-      ];
       
       // Filter completed orders to last 24 hours
       const now = new Date();
@@ -101,16 +104,14 @@ const DashboardScreen = () => {
       
       const skipped = skippedRes.data.orders || [];
 
-      // Update state
       setAvailableOrders(available);
-      setActiveOrders(active);
+      setScheduledOrders(scheduledData);
       setCompletedOrders(recentCompleted);
       setSkippedOrders(skipped);
       
-      // Cache for next time
       cacheManager.set(cacheKey, {
         available,
-        active,
+        scheduled: scheduledData,
         completed: recentCompleted,
         skipped
       });
@@ -374,8 +375,8 @@ const DashboardScreen = () => {
       },
       active: {
         icon: <Clock size={64} weight="duotone" />,
-        title: 'No active orders',
-        subtitle: 'Accept an order to get started'
+        title: 'No scheduled orders today',
+        subtitle: 'Scheduled deliveries for today will appear here'
       },
       completed: {
         icon: <CheckCircle size={64} weight="duotone" />,
@@ -401,7 +402,7 @@ const DashboardScreen = () => {
 
   const currentOrders = {
     available: availableOrders,
-    active: activeOrders,
+    active: scheduledOrders,
     completed: completedOrders,
     skipped: skippedOrders
   }[activeTab];
@@ -453,9 +454,9 @@ const DashboardScreen = () => {
           onClick={() => handleTabChange('active')}
           data-testid="tab-active"
         >
-          Active
-          {activeOrders.length > 0 && (
-            <span className="badge">{activeOrders.length}</span>
+          Schedules
+          {scheduledOrders.length > 0 && (
+            <span className="badge">{scheduledOrders.length}</span>
           )}
         </button>
         <button
