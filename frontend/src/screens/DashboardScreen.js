@@ -327,13 +327,23 @@ const DashboardScreen = () => {
       )}
 
       {type === 'active' && (
-        <button
-          onClick={() => handleContinueOrder(order)}
-          className="btn-primary"
-          data-testid={`continue-order-button-${order.id}`}
-        >
-          Continue
-        </button>
+        <div className="order-actions">
+          <button
+            onClick={() => handleRejectOrder(order.id)}
+            className="btn-secondary-sm"
+            data-testid={`reject-order-button-${order.id}`}
+          >
+            <X size={18} weight="bold" />
+            Skip
+          </button>
+          <button
+            onClick={() => handleAcceptOrder(order.id)}
+            className="btn-primary-sm"
+            data-testid={`accept-order-button-${order.id}`}
+          >
+            {localStorage.getItem(`working_on_${order.id}`) ? 'Resume Order' : 'Accept Order'}
+          </button>
+        </div>
       )}
 
       {type === 'skipped' && (
