@@ -76,7 +76,7 @@ const ShoppingScreen = () => {
     if (order?.customer_phone) {
       const phone = order.customer_phone.replace(/[^0-9]/g, '');
       const invoiceUrl = `${window.location.origin}/invoice/${orderId}${isScheduled ? '?source=scheduled' : ''}`;
-      const message = encodeURIComponent(`Hi ${order.customer_name}, I'm your delivery driver from Repid Cart. I'm currently shopping for your Order #${order.order_number}.\n\nView your invoice here:\n${invoiceUrl}`);
+      const message = encodeURIComponent(`Hi ${order.customer_name}, Thanks for using Repid Cart 💚\n\nI'm currently shopping for your Order #${order.order_number}.\n\nView your invoice here:\n${invoiceUrl}`);
       window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     }
   };
