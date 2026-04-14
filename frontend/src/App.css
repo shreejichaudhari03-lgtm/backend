@@ -51,6 +51,21 @@
   margin: 0;
 }
 
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.whatsapp-btn {
+  color: #25D366 !important;
+}
+
+.whatsapp-btn:hover {
+  background: #dcfce7 !important;
+}
+
+
 .status-badge {
   display: inline-block;
   background-color: #22c55e;

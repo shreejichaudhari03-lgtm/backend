@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { MapPin, Camera, ArrowLeft, CheckCircle, Phone, Copy } from '@phosphor-icons/react';
+import { MapPin, Camera, ArrowLeft, CheckCircle, Phone, Copy, WhatsappLogo } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -60,6 +60,14 @@ const DeliveryScreen = () => {
   const handleCallCustomer = () => {
     if (order?.customer_phone) {
       window.location.href = `tel:${order.customer_phone}`;
+    }
+  };
+
+  const handleWhatsApp = () => {
+    if (order?.customer_phone) {
+      const phone = order.customer_phone.replace(/[^0-9]/g, '');
+      const message = encodeURIComponent(`Hi ${order.customer_name}, your Order #${order.order_number} from Repid Cart has been delivered! Thank you for your order.`);
+      window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     }
   };
 
@@ -146,13 +154,22 @@ const DeliveryScreen = () => {
             <ArrowLeft size={24} weight="bold" />
           </button>
           <h3>Delivery in Progress</h3>
-          <button 
-            onClick={handleCallCustomer} 
-            className="btn-icon"
-            data-testid="call-customer-button"
-          >
-            <Phone size={24} weight="bold" />
-          </button>
+          <div className="nav-actions">
+            <button 
+              onClick={handleWhatsApp} 
+              className="btn-icon whatsapp-btn"
+              data-testid="whatsapp-customer-button"
+            >
+              <WhatsappLogo size={24} weight="bold" />
+            </button>
+            <button 
+              onClick={handleCallCustomer} 
+              className="btn-icon"
+              data-testid="call-customer-button"
+            >
+              <Phone size={24} weight="bold" />
+            </button>
+          </div>
         </div>
       </div>
 

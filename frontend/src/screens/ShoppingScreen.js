@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
-import { CheckCircle, Circle, ArrowLeft, Phone } from '@phosphor-icons/react';
+import { CheckCircle, Circle, ArrowLeft, Phone, WhatsappLogo } from '@phosphor-icons/react';
 import ImageModal from '../components/ImageModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -72,6 +72,14 @@ const ShoppingScreen = () => {
     }
   };
 
+  const handleWhatsApp = () => {
+    if (order?.customer_phone) {
+      const phone = order.customer_phone.replace(/[^0-9]/g, '');
+      const message = encodeURIComponent(`Hi ${order.customer_name}, I'm your delivery driver from Repid Cart. I'm currently shopping for your Order #${order.order_number}. I'll update you once I'm on my way!`);
+      window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+    }
+  };
+
   const handleStartDelivery = async () => {
     const partnerId = localStorage.getItem('partner_id');
     
@@ -127,13 +135,22 @@ const ShoppingScreen = () => {
             <ArrowLeft size={24} weight="bold" />
           </button>
           <h3>Shopping List</h3>
-          <button 
-            onClick={handleCallCustomer} 
-            className="btn-icon"
-            data-testid="call-customer-button"
-          >
-            <Phone size={24} weight="bold" />
-          </button>
+          <div className="nav-actions">
+            <button 
+              onClick={handleWhatsApp} 
+              className="btn-icon whatsapp-btn"
+              data-testid="whatsapp-customer-button"
+            >
+              <WhatsappLogo size={24} weight="bold" />
+            </button>
+            <button 
+              onClick={handleCallCustomer} 
+              className="btn-icon"
+              data-testid="call-customer-button"
+            >
+              <Phone size={24} weight="bold" />
+            </button>
+          </div>
         </div>
       </div>
 
