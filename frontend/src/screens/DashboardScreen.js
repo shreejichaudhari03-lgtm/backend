@@ -121,12 +121,15 @@ const DashboardScreen = () => {
         axios.get(`${BACKEND_URL}/api/scheduled-orders?date=${today}`).catch(() => ({ data: { orders: [] } }))
       ]);
       const allScheduled = scheduledRes.data.orders || [];
-      // Schedules tab: only non-completed
-      const scheduledData = allScheduled.filter(o => o.status !== 'completed');
+      // Schedules tab: only non-completed, newest first
+      const scheduledData = allScheduled
+        .filter(o => o.status !== 'completed')
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       // Completed scheduled orders (last 24 hours)
       const completedScheduled = allScheduled.filter(o => o.status === 'completed');
 
-      const available = availableRes.data.orders || [];
+      const available = (availableRes.data.orders || [])
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       
       // Filter completed orders to last 24 hours
       const now = new Date();

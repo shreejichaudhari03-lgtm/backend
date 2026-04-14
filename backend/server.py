@@ -355,7 +355,7 @@ async def get_scheduled_orders(
         if partner_id:
             query = query.eq("delivery_partner_id", partner_id)
         
-        response = query.order("scheduled_date", desc=False).execute()
+        response = query.order("created_at", desc=True).execute()
         return {"success": True, "orders": response.data}
     except Exception as e:
         logger.error(f"Error fetching scheduled orders: {e}")
