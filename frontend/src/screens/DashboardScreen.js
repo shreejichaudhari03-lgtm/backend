@@ -121,12 +121,14 @@ const DashboardScreen = () => {
         axios.get(`${BACKEND_URL}/api/scheduled-orders?date=${today}`).catch(() => ({ data: { orders: [] } }))
       ]);
       const allScheduled = scheduledRes.data.orders || [];
-      // Schedules tab: only non-completed, newest first
+      // Schedules tab: only pending/active orders, newest first
       const scheduledData = allScheduled
-        .filter(o => o.status !== 'completed')
+        .filter(o => o.status !== 'completed' && o.status !== 'skipped')
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       // Completed scheduled orders (last 24 hours)
       const completedScheduled = allScheduled.filter(o => o.status === 'completed');
+      // Skipped scheduled orders
+      const skippedScheduled = allScheduled.filter(o => o.status === 'skipped');
 
       const available = (availableRes.data.orders || [])
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -143,23 +145,28 @@ const DashboardScreen = () => {
         return orderDate >= twentyFourHoursAgo;
       });
       
-      // Merge completed from both tables, mark scheduled ones
+      // Merge completed from both tables
       const allCompleted = [
         ...recentCompleted,
         ...recentCompletedScheduled.map(o => ({ ...o, _source: 'scheduled' }))
       ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      const skipped = skippedRes.data.orders || [];
+
+      // Merge skipped from both tables
+      const allSkipped = [
+        ...(skippedRes.data.orders || []),
+        ...skippedScheduled.map(o => ({ ...o, _source: 'scheduled' }))
+      ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
       setAvailableOrders(available);
       setScheduledOrders(scheduledData);
       setCompletedOrders(allCompleted);
-      setSkippedOrders(skipped);
+      setSkippedOrders(allSkipped);
       
       cacheManager.set(cacheKey, {
         available,
         scheduled: scheduledData,
         completed: allCompleted,
-        skipped
+        skipped: allSkipped
       });
       
       setLoading(false);
@@ -198,6 +205,13 @@ const DashboardScreen = () => {
   const handleRejectOrder = async (orderId, isScheduled = false) => {
     const partnerId = localStorage.getItem('partner_id');
     
+    // Immediately remove from UI for instant feedback
+    if (isScheduled) {
+      setScheduledOrders(prev => prev.filter(o => o.id !== orderId));
+    } else {
+      setAvailableOrders(prev => prev.filter(o => o.id !== orderId));
+    }
+
     try {
       const endpoint = isScheduled 
         ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
@@ -215,6 +229,8 @@ const DashboardScreen = () => {
     } catch (error) {
       console.error('Error skipping order:', error);
       toast.error('Failed to skip order');
+      // Refresh to restore if API failed
+      fetchAllOrders(partnerId);
     }
   };
 
