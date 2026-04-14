@@ -168,7 +168,21 @@ const ShoppingScreen = () => {
           </div>
           <div className="address-row">
             <span className="text-secondary">Deliver to:</span>
-            <p className="address-text">{order.customer_address}</p>
+            <div className="address-structured">
+              {order.customer_address?.split(',').map((part, i) => {
+                const trimmed = part.trim();
+                const labels = ['Building', 'Floor', 'House no'];
+                // Parse "Floor 3" -> label: Floor, value: 3
+                const match = trimmed.match(/^(Floor|Door|House)\s*(.+)$/i);
+                if (match) {
+                  const label = match[1] === 'Door' ? 'House no' : match[1];
+                  return <div key={i} className="address-line"><span className="address-label">{label}</span><span className="address-value">{match[2]}</span></div>;
+                }
+                // First part is building
+                const label = i === 0 ? 'Building' : (labels[i] || 'Address');
+                return <div key={i} className="address-line"><span className="address-label">{label}</span><span className="address-value">{trimmed}</span></div>;
+              })}
+            </div>
           </div>
         </div>
 

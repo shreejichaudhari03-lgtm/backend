@@ -285,9 +285,20 @@ const DashboardScreen = () => {
           <User size={18} weight="bold" />
           <span>{order.customer_name}</span>
         </div>
-        <div className="info-row">
+        <div className="info-row address-info-row">
           <MapPin size={18} weight="bold" />
-          <span>{order.customer_address}</span>
+          <div className="address-structured-compact">
+            {order.customer_address?.split(',').map((part, i) => {
+              const trimmed = part.trim();
+              const match = trimmed.match(/^(Floor|Door|House)\s*(.+)$/i);
+              if (match) {
+                const label = match[1] === 'Door' ? 'House no' : match[1];
+                return <span key={i}><strong>{label}:</strong> {match[2]}</span>;
+              }
+              const label = i === 0 ? 'Bldg' : '';
+              return <span key={i}>{label ? <><strong>{label}:</strong> {trimmed}</> : trimmed}</span>;
+            })}
+          </div>
         </div>
       </div>
 

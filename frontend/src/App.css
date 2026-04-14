@@ -898,6 +898,52 @@
   margin: 0;
 }
 
+.address-structured {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+
+.address-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.address-label {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 600;
+  min-width: 75px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.address-value {
+  font-size: 1rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.address-structured-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  color: #334155;
+}
+
+.address-structured-compact strong {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.address-info-row {
+  align-items: flex-start;
+}
+
+
 /* Enhanced Checklist Item */
 .item-price {
   font-weight: 700;
