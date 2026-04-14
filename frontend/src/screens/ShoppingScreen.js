@@ -75,7 +75,8 @@ const ShoppingScreen = () => {
   const handleWhatsApp = () => {
     if (order?.customer_phone) {
       const phone = order.customer_phone.replace(/[^0-9]/g, '');
-      const message = encodeURIComponent(`Hi ${order.customer_name}, I'm your delivery driver from Repid Cart. I'm currently shopping for your Order #${order.order_number}. I'll update you once I'm on my way!`);
+      const invoiceUrl = `${window.location.origin}/invoice/${orderId}${isScheduled ? '?source=scheduled' : ''}`;
+      const message = encodeURIComponent(`Hi ${order.customer_name}, I'm your delivery driver from Repid Cart. I'm currently shopping for your Order #${order.order_number}.\n\nView your invoice here:\n${invoiceUrl}`);
       window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     }
   };
@@ -84,14 +85,17 @@ const ShoppingScreen = () => {
     const partnerId = localStorage.getItem('partner_id');
     
     try {
-      // Update status on the correct table
       const endpoint = isScheduled 
         ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
         : `${BACKEND_URL}/api/orders/${orderId}`;
       
+      // Save cancelled/unavailable items along with status
+      const cancelledIndices = Array.from(removedItems);
+      
       await axios.patch(endpoint, {
         status: 'delivering',
-        delivery_partner_id: partnerId
+        delivery_partner_id: partnerId,
+        cancelled_items: cancelledIndices.length > 0 ? cancelledIndices : null
       });
       
       localStorage.removeItem(`working_on_${orderId}`);

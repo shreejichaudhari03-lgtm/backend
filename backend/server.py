@@ -45,6 +45,7 @@ class PinLoginResponse(BaseModel):
 class OrderUpdateRequest(BaseModel):
     status: Optional[str] = None
     delivery_partner_id: Optional[str] = None
+    cancelled_items: Optional[List[int]] = None
 
 class CompleteDeliveryRequest(BaseModel):
     customer_pin: str
@@ -131,6 +132,8 @@ async def update_order(order_id: str, request: OrderUpdateRequest):
             update_data["status"] = request.status
         if request.delivery_partner_id is not None:
             update_data["delivery_partner_id"] = request.delivery_partner_id
+        if request.cancelled_items is not None:
+            update_data["cancelled_items"] = request.cancelled_items
         
         response = supabase.table("orders").update(
             update_data
@@ -371,6 +374,8 @@ async def update_scheduled_order(order_id: str, request: OrderUpdateRequest):
             update_data["status"] = request.status
         if request.delivery_partner_id is not None:
             update_data["delivery_partner_id"] = request.delivery_partner_id
+        if request.cancelled_items is not None:
+            update_data["cancelled_items"] = request.cancelled_items
         
         response = supabase.table("scheduled_orders").update(
             update_data

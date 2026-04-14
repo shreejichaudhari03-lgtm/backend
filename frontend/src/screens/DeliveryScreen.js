@@ -66,7 +66,8 @@ const DeliveryScreen = () => {
   const handleWhatsApp = () => {
     if (order?.customer_phone) {
       const phone = order.customer_phone.replace(/[^0-9]/g, '');
-      const message = encodeURIComponent(`Hi ${order.customer_name}, your Order #${order.order_number} from Repid Cart has been delivered! Thank you for your order.`);
+      const invoiceUrl = `${window.location.origin}/invoice/${orderId}${isScheduled ? '?source=scheduled' : ''}`;
+      const message = encodeURIComponent(`Hi ${order.customer_name}, your Order #${order.order_number} from Repid Cart has been delivered!\n\nView your invoice here:\n${invoiceUrl}\n\nThank you for your order!`);
       window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     }
   };

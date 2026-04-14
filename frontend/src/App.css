@@ -1844,3 +1844,185 @@
   margin-left: auto;
 }
 
+
+/* Invoice Page */
+.invoice-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  padding: 1rem;
+}
+
+.invoice-loading,
+.invoice-error {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #64748b;
+  font-size: 1rem;
+}
+
+.invoice-container {
+  max-width: 600px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.invoice-header {
+  background: #1e40af;
+  color: white;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.invoice-brand {
+  font-family: 'Manrope', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.02em;
+}
+
+.invoice-meta {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.invoice-customer {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.invoice-customer h3 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin: 0 0 0.5rem 0;
+}
+
+.customer-name-inv {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 1rem;
+  margin: 0 0 0.15rem 0;
+}
+
+.customer-address-inv,
+.customer-phone-inv {
+  color: #64748b;
+  font-size: 0.875rem;
+  margin: 0 0 0.1rem 0;
+}
+
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.invoice-table th {
+  background: #f1f5f9;
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.invoice-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.item-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.invoice-item-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 0.25rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.item-cancelled td {
+  opacity: 0.5;
+}
+
+.item-cancelled .item-name-cell span {
+  text-decoration: line-through;
+}
+
+.price-struck {
+  color: #94a3b8;
+}
+
+.item-status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 1rem;
+  white-space: nowrap;
+}
+
+.status-available {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-unavailable {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.invoice-totals {
+  padding: 1rem 1.5rem;
+  border-top: 2px solid #e2e8f0;
+}
+
+.total-row-inv {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.total-row-inv.unavailable-note {
+  color: #dc2626;
+  font-size: 0.8rem;
+}
+
+.total-row-inv.grand-total {
+  border-top: 2px solid #0f172a;
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.invoice-footer {
+  background: #f8fafc;
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.invoice-footer p {
+  margin: 0;
+}
+
