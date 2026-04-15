@@ -92,8 +92,6 @@ const LoginScreen = () => {
               {loading ? 'Logging in...' : 'Login'}
             </button>
           </form>
-
-          <p className="demo-hint">Demo PIN: 1234</p>
         </div>
       </div>
     </div>
