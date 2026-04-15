@@ -476,8 +476,8 @@ const DashboardScreen = () => {
       <div className="dashboard-header">
         <div className="header-content">
           <div>
-            <h1 data-testid="driver-name">{partnerName}</h1>
-            <p className="driver-id">Driver ID: {localStorage.getItem('partner_id')}</p>
+            <p className="welcome-text">Welcome</p>
+            <h1 data-testid="driver-name">RepidCart Backed</h1>
           </div>
           <button 
             onClick={() => navigate('/profile')} 
