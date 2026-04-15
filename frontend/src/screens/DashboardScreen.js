@@ -9,7 +9,8 @@ import {
   User, 
   CheckCircle,
   Clock,
-  X
+  X,
+  MagnifyingGlass
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import ImageModal from '../components/ImageModal';
@@ -29,6 +30,7 @@ const DashboardScreen = () => {
   const [loading, setLoading] = useState(true);
   const [partnerName, setPartnerName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const channelRef = useRef(null);
   const pollIntervalRef = useRef(null);
   const navigate = useNavigate();
@@ -236,6 +238,7 @@ const DashboardScreen = () => {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    setSearchQuery('');
     localStorage.setItem('lastActiveTab', tab);
   };
 
@@ -455,10 +458,16 @@ const DashboardScreen = () => {
     );
   };
 
+  const filteredCompleted = searchQuery.trim()
+    ? completedOrders.filter(o => 
+        o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : completedOrders;
+
   const currentOrders = {
     available: availableOrders,
     active: scheduledOrders,
-    completed: completedOrders,
+    completed: filteredCompleted,
     skipped: skippedOrders
   }[activeTab];
 
@@ -534,10 +543,35 @@ const DashboardScreen = () => {
       </div>
 
       <div className="screen-content">
+        {activeTab === 'completed' && (
+          <div className="search-bar" data-testid="completed-search">
+            <MagnifyingGlass size={20} weight="bold" />
+            <input
+              type="text"
+              placeholder="Search customer name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              data-testid="completed-search-input"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="search-clear" data-testid="search-clear-btn">
+                <X size={16} weight="bold" />
+              </button>
+            )}
+          </div>
+        )}
         {loading ? (
           <OrderListSkeleton />
         ) : currentOrders.length === 0 ? (
-          renderEmptyState(activeTab)
+          searchQuery ? (
+            <div className="empty-state">
+              <MagnifyingGlass size={48} weight="duotone" />
+              <h2>No results</h2>
+              <p>No completed orders found for "{searchQuery}"</p>
+            </div>
+          ) : (
+            renderEmptyState(activeTab)
+          )
         ) : (
           <div className="orders-list" data-testid={`${activeTab}-orders-list`}>
             {currentOrders.map((order) => renderOrderCard(order, activeTab))}
