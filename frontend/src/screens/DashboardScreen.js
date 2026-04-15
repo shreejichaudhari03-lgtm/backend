@@ -255,13 +255,32 @@ const DashboardScreen = () => {
     return 0;
   };
 
+  const getTimeAgo = (dateStr) => {
+    if (!dateStr) return '';
+    const now = new Date();
+    const date = new Date(dateStr);
+    const seconds = Math.floor((now - date) / 1000);
+    
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return 'yesterday';
+    return `${days}d ago`;
+  };
+
   const renderOrderCard = (order, type) => {
     const isScheduled = type === 'active';
     
     return (
     <div key={order.id} className="order-card" data-testid={`order-card-${order.id}`}>
       <div className="order-header">
-        <span className="order-number">Order #{order.order_number}</span>
+        <div className="order-header-left">
+          <span className="order-number">Order #{order.order_number}</span>
+          <span className="order-time-ago">{getTimeAgo(order.created_at)}</span>
+        </div>
         <span className={`status-badge status-${order.status}`}>
           {order.status}
         </span>

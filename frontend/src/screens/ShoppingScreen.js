@@ -89,13 +89,16 @@ const ShoppingScreen = () => {
         ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
         : `${BACKEND_URL}/api/orders/${orderId}`;
       
-      // Save cancelled/unavailable items along with status
-      const cancelledIndices = Array.from(removedItems);
+      // Mark unavailable items directly in the items array
+      const updatedItems = order.items.map((item, index) => ({
+        ...item,
+        unavailable: removedItems.has(index) ? true : undefined
+      }));
       
       await axios.patch(endpoint, {
         status: 'delivering',
         delivery_partner_id: partnerId,
-        cancelled_items: cancelledIndices.length > 0 ? cancelledIndices : null
+        items: removedItems.size > 0 ? updatedItems : undefined
       });
       
       localStorage.removeItem(`working_on_${orderId}`);

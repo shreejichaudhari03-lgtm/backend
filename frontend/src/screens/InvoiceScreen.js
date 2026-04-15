@@ -52,9 +52,9 @@ const InvoiceScreen = () => {
     );
   }
 
-  const cancelledItems = order.cancelled_items || [];
-  const availableItems = (order.items || []).filter((_, i) => !cancelledItems.includes(i));
-  const unavailableItems = (order.items || []).filter((_, i) => cancelledItems.includes(i));
+  const allItems = order.items || [];
+  const availableItems = allItems.filter(item => !item.unavailable);
+  const unavailableItems = allItems.filter(item => item.unavailable);
   
   const availableTotal = availableItems.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
   const deliveryFee = order.delivery_fee || 0;
@@ -93,8 +93,8 @@ const InvoiceScreen = () => {
             </tr>
           </thead>
           <tbody>
-            {(order.items || []).map((item, index) => {
-              const isCancelled = cancelledItems.includes(index);
+            {allItems.map((item, index) => {
+              const isCancelled = !!item.unavailable;
               return (
                 <tr key={index} className={isCancelled ? 'item-cancelled' : 'item-available'}>
                   <td className="item-name-cell">
