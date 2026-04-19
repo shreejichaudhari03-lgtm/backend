@@ -117,7 +117,7 @@ const DashboardScreen = () => {
 
       // Fetch all in parallel for speed (including scheduled orders)
       const [availableRes, completedRes, skippedRes, scheduledRes] = await Promise.all([
-        axios.get(`${BACKEND_URL}/api/orders?status=pending`),
+        axios.get(`${BACKEND_URL}/api/orders?status=placed`),
         axios.get(`${BACKEND_URL}/api/orders?status=completed&partner_id=${partnerId}&limit=50`),
         axios.get(`${BACKEND_URL}/api/orders?status=skipped&partner_id=${partnerId}`),
         axios.get(`${BACKEND_URL}/api/scheduled-orders?date=${today}`).catch(() => ({ data: { orders: [] } }))
