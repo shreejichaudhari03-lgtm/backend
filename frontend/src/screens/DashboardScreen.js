@@ -10,11 +10,11 @@ import {
   CheckCircle,
   Clock,
   X,
-  MagnifyingGlass
+  MagnifyingGlass,
+  Scissors
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import ImageModal from '../components/ImageModal';
-import SplitOrderModal, { SPLIT_THRESHOLD } from '../components/SplitOrderModal';
 import { OrderListSkeleton } from '../components/OrderSkeleton';
 import { cacheManager } from '../utils/cache';
 
@@ -32,8 +32,9 @@ const DashboardScreen = () => {
   const [partnerName, setPartnerName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [splitOrder, setSplitOrder] = useState(null); // order to show split modal for
-  const [splitIsScheduled, setSplitIsScheduled] = useState(false);
+  const [splitPickerOrder, setSplitPickerOrder] = useState(null); // order for item picker
+  const [splitPickerScheduled, setSplitPickerScheduled] = useState(false);
+  const [selectedSplitItems, setSelectedSplitItems] = useState(new Set());
   const channelRef = useRef(null);
   const pollIntervalRef = useRef(null);
   const navigate = useNavigate();
@@ -190,65 +191,60 @@ const DashboardScreen = () => {
     }
   };
 
-  const handleAcceptOrder = async (orderId, isScheduled = false) => {
+  const handleAcceptOrder = async (orderId, isScheduled = false, splitGroup = null) => {
     const partnerId = localStorage.getItem('partner_id');
     
-    // Find the order to check total
-    const ordersList = isScheduled ? scheduledOrders : availableOrders;
-    const order = ordersList.find(o => o.id === orderId);
-    
-    // Check if order exceeds split threshold
-    if (order && order.total > SPLIT_THRESHOLD && order.items && order.items.length > 1) {
-      setSplitOrder(order);
-      setSplitIsScheduled(isScheduled);
-      return;
-    }
-    
-    // Normal accept flow
     try {
       localStorage.setItem(`working_on_${orderId}`, partnerId);
       if (isScheduled) {
         localStorage.setItem(`scheduled_order_${orderId}`, 'true');
       }
-      navigate(`/shopping/${orderId}${isScheduled ? '?source=scheduled' : ''}`);
+      // Pass split group info if accepting a split delivery
+      const params = new URLSearchParams();
+      if (isScheduled) params.set('source', 'scheduled');
+      if (splitGroup) params.set('splitGroup', splitGroup);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      navigate(`/shopping/${orderId}${qs}`);
     } catch (error) {
       console.error('Error accepting order:', error);
       alert('Failed to accept order. Please try again.');
     }
   };
 
-  const handleSplitConfirm = async (splits) => {
-    if (!splitOrder) return;
-    const partnerId = localStorage.getItem('partner_id');
-    
-    try {
-      const tableParam = splitIsScheduled ? '?table=scheduled_orders' : '';
-      const response = await axios.post(
-        `${BACKEND_URL}/api/orders/${splitOrder.id}/split${tableParam}`,
-        { splits }
-      );
-      
-      if (response.data.success) {
-        toast.success(`Order split into ${response.data.count} deliveries`);
-        setSplitOrder(null);
-        fetchAllOrders(partnerId);
-      }
-    } catch (error) {
-      console.error('Error splitting order:', error);
-      toast.error('Failed to split order');
-    }
+  const handleSplitOrder = (order, isScheduled) => {
+    setSplitPickerOrder(order);
+    setSplitPickerScheduled(isScheduled);
+    setSelectedSplitItems(new Set());
   };
 
-  const handleSplitSkip = () => {
-    // User chose "deliver as one" — proceed normally
-    const partnerId = localStorage.getItem('partner_id');
-    const orderId = splitOrder.id;
-    localStorage.setItem(`working_on_${orderId}`, partnerId);
-    if (splitIsScheduled) {
-      localStorage.setItem(`scheduled_order_${orderId}`, 'true');
-    }
-    setSplitOrder(null);
-    navigate(`/shopping/${orderId}${splitIsScheduled ? '?source=scheduled' : ''}`);
+  const confirmSplit = () => {
+    if (!splitPickerOrder || selectedSplitItems.size === 0) return;
+    const orderId = splitPickerOrder.id;
+    const allIndices = splitPickerOrder.items.map((_, i) => i);
+    const group1 = Array.from(selectedSplitItems);
+    const group2 = allIndices.filter(i => !selectedSplitItems.has(i));
+    
+    // Save split info to localStorage
+    localStorage.setItem(`split_${orderId}`, JSON.stringify({ group1, group2, delivered1: false }));
+    setSplitPickerOrder(null);
+    // Force re-render
+    setAvailableOrders(prev => [...prev]);
+    setScheduledOrders(prev => [...prev]);
+    toast.success('Order split! Deliver the first part now.');
+  };
+
+  const getSplitInfo = (orderId) => {
+    try {
+      const data = localStorage.getItem(`split_${orderId}`);
+      return data ? JSON.parse(data) : null;
+    } catch { return null; }
+  };
+
+  const markSplitDelivered = (orderId, group) => {
+    const info = getSplitInfo(orderId);
+    if (!info) return;
+    if (group === 1) info.delivered1 = true;
+    localStorage.setItem(`split_${orderId}`, JSON.stringify(info));
   };
 
   const handleRejectOrder = async (orderId, isScheduled = false) => {
@@ -420,25 +416,95 @@ const DashboardScreen = () => {
         )}
       </div>
 
-      {(type === 'available' || type === 'active') && (
-        <div className="order-actions">
-          <button
-            onClick={() => handleRejectOrder(order.id, isScheduled)}
-            className="btn-secondary-sm"
-            data-testid={`reject-order-button-${order.id}`}
-          >
-            <X size={18} weight="bold" />
-            Skip
-          </button>
-          <button
-            onClick={() => handleAcceptOrder(order.id, isScheduled)}
-            className="btn-primary-sm"
-            data-testid={`accept-order-button-${order.id}`}
-          >
-            {localStorage.getItem(`working_on_${order.id}`) ? 'Resume Order' : 'Accept Order'}
-          </button>
-        </div>
-      )}
+      {(type === 'available' || type === 'active') && (() => {
+        const splitInfo = getSplitInfo(order.id);
+        
+        if (splitInfo) {
+          // Split view: show two groups in one card
+          const group1Items = splitInfo.group1.map(i => order.items[i]).filter(Boolean);
+          const group2Items = splitInfo.group2.map(i => order.items[i]).filter(Boolean);
+          const group1Total = group1Items.reduce((s, it) => s + (it.price * (it.quantity || 1)), 0);
+          const group2Total = group2Items.reduce((s, it) => s + (it.price * (it.quantity || 1)), 0);
+          
+          return (
+            <div className="split-card-view">
+              <div className={`split-group-section ${splitInfo.delivered1 ? 'delivered' : ''}`}>
+                <div className="split-group-label">
+                  <span className="split-dot split-dot-1">1</span>
+                  <span>{splitInfo.delivered1 ? 'Delivered' : `Delivery 1 · ${group1Items.length} items · $${group1Total.toFixed(2)}`}</span>
+                </div>
+                <div className="split-group-items">
+                  {group1Items.map((item, i) => (
+                    <span key={i} className="split-item-chip">{item.name}</span>
+                  ))}
+                </div>
+                {!splitInfo.delivered1 && (
+                  <button
+                    onClick={() => handleAcceptOrder(order.id, isScheduled, '1')}
+                    className="btn-primary-sm"
+                    data-testid={`accept-split-1-${order.id}`}
+                  >Accept Delivery 1</button>
+                )}
+              </div>
+              
+              <div className="split-divider">
+                <Scissors size={14} />
+                <span>split</span>
+              </div>
+
+              <div className={`split-group-section ${!splitInfo.delivered1 ? 'waiting' : ''}`}>
+                <div className="split-group-label">
+                  <span className="split-dot split-dot-2">2</span>
+                  <span>{!splitInfo.delivered1 ? `Remaining · ${group2Items.length} items · $${group2Total.toFixed(2)}` : `Delivery 2 · ${group2Items.length} items · $${group2Total.toFixed(2)}`}</span>
+                </div>
+                <div className="split-group-items">
+                  {group2Items.map((item, i) => (
+                    <span key={i} className="split-item-chip">{item.name}</span>
+                  ))}
+                </div>
+                {splitInfo.delivered1 && (
+                  <button
+                    onClick={() => handleAcceptOrder(order.id, isScheduled, '2')}
+                    className="btn-primary-sm"
+                    data-testid={`accept-split-2-${order.id}`}
+                  >Accept Delivery 2</button>
+                )}
+              </div>
+            </div>
+          );
+        }
+        
+        // Normal (non-split) actions
+        return (
+          <div className="order-actions">
+            <button
+              onClick={() => handleRejectOrder(order.id, isScheduled)}
+              className="btn-secondary-sm"
+              data-testid={`reject-order-button-${order.id}`}
+            >
+              <X size={18} weight="bold" />
+              Skip
+            </button>
+            {order.items && order.items.length > 1 && (
+              <button
+                onClick={() => handleSplitOrder(order, isScheduled)}
+                className="btn-split-sm"
+                data-testid={`split-order-button-${order.id}`}
+              >
+                <Scissors size={18} weight="bold" />
+                Split
+              </button>
+            )}
+            <button
+              onClick={() => handleAcceptOrder(order.id, isScheduled)}
+              className="btn-primary-sm"
+              data-testid={`accept-order-button-${order.id}`}
+            >
+              {localStorage.getItem(`working_on_${order.id}`) ? 'Resume' : 'Accept'}
+            </button>
+          </div>
+        );
+      })()}
 
       {type === 'skipped' && (
         <button
@@ -629,15 +695,57 @@ const DashboardScreen = () => {
       {/* Image Modal */}
       <ImageModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
 
-      {/* Split Order Modal */}
-      {splitOrder && (
-        <SplitOrderModal
-          order={splitOrder}
-          isScheduled={splitIsScheduled}
-          onSplit={handleSplitConfirm}
-          onSkip={handleSplitSkip}
-          onClose={() => setSplitOrder(null)}
-        />
+      {/* Split Item Picker */}
+      {splitPickerOrder && (
+        <div className="modal-overlay" onClick={() => setSplitPickerOrder(null)}>
+          <div className="split-picker-modal" onClick={e => e.stopPropagation()} data-testid="split-picker">
+            <button className="split-modal-close" onClick={() => setSplitPickerOrder(null)}><X size={20} /></button>
+            <h2 className="split-picker-title"><Scissors size={22} /> Split Order #{splitPickerOrder.order_number}</h2>
+            <p className="split-picker-desc">Pick items for the <strong>first delivery</strong>. The rest will stay as the second delivery.</p>
+            
+            <div className="split-picker-list">
+              {splitPickerOrder.items.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={`split-picker-item ${selectedSplitItems.has(idx) ? 'selected' : ''}`}
+                  onClick={() => {
+                    setSelectedSplitItems(prev => {
+                      const next = new Set(prev);
+                      next.has(idx) ? next.delete(idx) : next.add(idx);
+                      return next;
+                    });
+                  }}
+                  data-testid={`split-pick-item-${idx}`}
+                >
+                  <div className={`split-picker-check ${selectedSplitItems.has(idx) ? 'checked' : ''}`}>
+                    {selectedSplitItems.has(idx) ? <CheckCircle size={22} weight="fill" /> : <div className="split-picker-circle" />}
+                  </div>
+                  {(item.image || item.image_url) && (
+                    <img src={item.image || item.image_url} alt={item.name} className="split-picker-img" />
+                  )}
+                  <div className="split-picker-info">
+                    <span className="split-picker-name">{item.name}</span>
+                    <span className="split-picker-meta">Qty: {item.quantity || 1} · ${item.price?.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="split-picker-summary">
+              <span>Delivery 1: {selectedSplitItems.size} items</span>
+              <span>Delivery 2: {splitPickerOrder.items.length - selectedSplitItems.size} items</span>
+            </div>
+
+            <button
+              className="btn-split-primary"
+              disabled={selectedSplitItems.size === 0 || selectedSplitItems.size === splitPickerOrder.items.length}
+              onClick={confirmSplit}
+              data-testid="confirm-split-btn"
+            >
+              Confirm Split
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
