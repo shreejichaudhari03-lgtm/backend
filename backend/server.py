@@ -47,6 +47,9 @@ class OrderUpdateRequest(BaseModel):
     delivery_partner_id: Optional[str] = None
     items: Optional[List[dict]] = None
 
+class SplitOrderRequest(BaseModel):
+    splits: List[List[int]]  # List of item index groups, e.g. [[0,1],[2,3]]
+
 class CompleteDeliveryRequest(BaseModel):
     customer_pin: str
 
@@ -153,10 +156,66 @@ async def update_order(order_id: str, request: OrderUpdateRequest):
 async def reject_order(order_id: str):
     """Reject/skip an order"""
     try:
-        # Simply return success - order stays in pending for other drivers
         return {"success": True, "message": "Order skipped"}
     except Exception as e:
         logger.error(f"Error rejecting order: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/orders/{order_id}/split")
+async def split_order(order_id: str, request: SplitOrderRequest, table: Optional[str] = "orders"):
+    """Split an order into multiple smaller orders"""
+    try:
+        target_table = "scheduled_orders" if table == "scheduled_orders" else "orders"
+        
+        # Fetch original order
+        original = supabase.table(target_table).select("*").eq("id", order_id).single().execute()
+        if not original.data:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        order = original.data
+        items = order.get("items", [])
+        
+        created_orders = []
+        for i, item_indices in enumerate(request.splits):
+            split_items = [items[idx] for idx in item_indices if idx < len(items)]
+            if not split_items:
+                continue
+            
+            subtotal = sum(item.get("price", 0) * item.get("quantity", 1) for item in split_items)
+            delivery_fee = order.get("delivery_fee", 0)
+            
+            new_order = {
+                "order_number": int(f"{order.get('order_number', 0)}{i+1}"),
+                "customer_name": order.get("customer_name"),
+                "customer_phone": order.get("customer_phone"),
+                "customer_address": order.get("customer_address"),
+                "items": split_items,
+                "subtotal": round(subtotal, 2),
+                "delivery_fee": round(delivery_fee, 2),
+                "total": round(subtotal + delivery_fee, 2),
+                "status": "placed",
+                "delivery_partner_id": None,
+                "delivery_pin": order.get("delivery_pin"),
+                "delivery_photo_url": None,
+            }
+            
+            # Add scheduled fields if applicable
+            if target_table == "scheduled_orders":
+                new_order["scheduled_date"] = order.get("scheduled_date")
+                new_order["delivery_window"] = order.get("delivery_window")
+            
+            result = supabase.table(target_table).insert(new_order).execute()
+            if result.data:
+                created_orders.append(result.data[0])
+        
+        # Mark original order as split
+        supabase.table(target_table).update({"status": "split"}).eq("id", order_id).execute()
+        
+        return {"success": True, "split_orders": created_orders, "count": len(created_orders)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error splitting order: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/orders/{order_id}/complete")

@@ -14,6 +14,7 @@ import {
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import ImageModal from '../components/ImageModal';
+import SplitOrderModal, { SPLIT_THRESHOLD } from '../components/SplitOrderModal';
 import { OrderListSkeleton } from '../components/OrderSkeleton';
 import { cacheManager } from '../utils/cache';
 
@@ -31,6 +32,8 @@ const DashboardScreen = () => {
   const [partnerName, setPartnerName] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [splitOrder, setSplitOrder] = useState(null); // order to show split modal for
+  const [splitIsScheduled, setSplitIsScheduled] = useState(false);
   const channelRef = useRef(null);
   const pollIntervalRef = useRef(null);
   const navigate = useNavigate();
@@ -123,9 +126,9 @@ const DashboardScreen = () => {
         axios.get(`${BACKEND_URL}/api/scheduled-orders?date=${today}`).catch(() => ({ data: { orders: [] } }))
       ]);
       const allScheduled = scheduledRes.data.orders || [];
-      // Schedules tab: only pending/active orders, newest first
+      // Schedules tab: only active orders (not completed, skipped, or split), newest first
       const scheduledData = allScheduled
-        .filter(o => o.status !== 'completed' && o.status !== 'skipped')
+        .filter(o => o.status !== 'completed' && o.status !== 'skipped' && o.status !== 'split')
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       // Completed scheduled orders (last 24 hours)
       const completedScheduled = allScheduled.filter(o => o.status === 'completed');
@@ -190,18 +193,62 @@ const DashboardScreen = () => {
   const handleAcceptOrder = async (orderId, isScheduled = false) => {
     const partnerId = localStorage.getItem('partner_id');
     
+    // Find the order to check total
+    const ordersList = isScheduled ? scheduledOrders : availableOrders;
+    const order = ordersList.find(o => o.id === orderId);
+    
+    // Check if order exceeds split threshold
+    if (order && order.total > SPLIT_THRESHOLD && order.items && order.items.length > 1) {
+      setSplitOrder(order);
+      setSplitIsScheduled(isScheduled);
+      return;
+    }
+    
+    // Normal accept flow
     try {
-      // Store that this driver is working on this order
       localStorage.setItem(`working_on_${orderId}`, partnerId);
       if (isScheduled) {
         localStorage.setItem(`scheduled_order_${orderId}`, 'true');
       }
-      
       navigate(`/shopping/${orderId}${isScheduled ? '?source=scheduled' : ''}`);
     } catch (error) {
       console.error('Error accepting order:', error);
       alert('Failed to accept order. Please try again.');
     }
+  };
+
+  const handleSplitConfirm = async (splits) => {
+    if (!splitOrder) return;
+    const partnerId = localStorage.getItem('partner_id');
+    
+    try {
+      const tableParam = splitIsScheduled ? '?table=scheduled_orders' : '';
+      const response = await axios.post(
+        `${BACKEND_URL}/api/orders/${splitOrder.id}/split${tableParam}`,
+        { splits }
+      );
+      
+      if (response.data.success) {
+        toast.success(`Order split into ${response.data.count} deliveries`);
+        setSplitOrder(null);
+        fetchAllOrders(partnerId);
+      }
+    } catch (error) {
+      console.error('Error splitting order:', error);
+      toast.error('Failed to split order');
+    }
+  };
+
+  const handleSplitSkip = () => {
+    // User chose "deliver as one" — proceed normally
+    const partnerId = localStorage.getItem('partner_id');
+    const orderId = splitOrder.id;
+    localStorage.setItem(`working_on_${orderId}`, partnerId);
+    if (splitIsScheduled) {
+      localStorage.setItem(`scheduled_order_${orderId}`, 'true');
+    }
+    setSplitOrder(null);
+    navigate(`/shopping/${orderId}${splitIsScheduled ? '?source=scheduled' : ''}`);
   };
 
   const handleRejectOrder = async (orderId, isScheduled = false) => {
@@ -581,6 +628,17 @@ const DashboardScreen = () => {
 
       {/* Image Modal */}
       <ImageModal imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
+
+      {/* Split Order Modal */}
+      {splitOrder && (
+        <SplitOrderModal
+          order={splitOrder}
+          isScheduled={splitIsScheduled}
+          onSplit={handleSplitConfirm}
+          onSkip={handleSplitSkip}
+          onClose={() => setSplitOrder(null)}
+        />
+      )}
     </div>
   );
 };
