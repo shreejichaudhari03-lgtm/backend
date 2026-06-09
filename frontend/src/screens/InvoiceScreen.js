@@ -8,6 +8,7 @@ const InvoiceScreen = () => {
   const { orderId } = useParams();
   const [searchParams] = useSearchParams();
   const source = searchParams.get('source');
+  const splitGroup = searchParams.get('splitGroup');
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -17,7 +18,6 @@ const InvoiceScreen = () => {
 
   const fetchOrder = async () => {
     try {
-      // Try regular orders first, then scheduled
       let response;
       if (source === 'scheduled') {
         response = await axios.get(`${BACKEND_URL}/api/scheduled-orders/${orderId}`);
@@ -52,7 +52,20 @@ const InvoiceScreen = () => {
     );
   }
 
-  const allItems = order.items || [];
+  // Filter items by split group if applicable
+  let displayItems = order.items || [];
+  if (splitGroup) {
+    try {
+      // Try localStorage first (driver's device)
+      const splitData = JSON.parse(localStorage.getItem(`split_${orderId}`) || '{}');
+      const indices = splitGroup === '1' ? splitData.group1 : splitData.group2;
+      if (indices && indices.length > 0) {
+        displayItems = indices.map(i => (order.items || [])[i]).filter(Boolean);
+      }
+    } catch {}
+  }
+  
+  const allItems = displayItems;
   const availableItems = allItems.filter(item => !item.unavailable);
   const unavailableItems = allItems.filter(item => item.unavailable);
   
@@ -66,7 +79,7 @@ const InvoiceScreen = () => {
         <div className="invoice-header">
           <h1 className="invoice-brand">Repid Cart</h1>
           <div className="invoice-meta">
-            <span className="invoice-number">Invoice #RC-{order.order_number}</span>
+            <span className="invoice-number">Invoice #RC-{order.order_number}{splitGroup ? ` (Part ${splitGroup})` : ''}</span>
             <span className="invoice-date">
               {new Date(order.created_at).toLocaleDateString('en-US', {
                 year: 'numeric', month: 'long', day: 'numeric'

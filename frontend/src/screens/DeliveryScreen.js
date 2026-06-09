@@ -10,8 +10,10 @@ const DeliveryScreen = () => {
   const { orderId } = useParams();
   const [searchParams] = useSearchParams();
   const isScheduled = searchParams.get('source') === 'scheduled' || localStorage.getItem(`scheduled_order_${orderId}`) === 'true';
+  const splitGroup = searchParams.get('splitGroup');
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
+  const [splitItems, setSplitItems] = useState(null); // filtered items for this split
   const [customerPin, setCustomerPin] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -29,7 +31,19 @@ const DeliveryScreen = () => {
         ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
         : `${BACKEND_URL}/api/orders/${orderId}`;
       const response = await axios.get(endpoint);
-      setOrder(response.data.order);
+      const fullOrder = response.data.order;
+      setOrder(fullOrder);
+      
+      // Filter items for split group
+      if (splitGroup && fullOrder.items) {
+        try {
+          const splitData = JSON.parse(localStorage.getItem(`split_${orderId}`) || '{}');
+          const indices = splitGroup === '1' ? splitData.group1 : splitData.group2;
+          if (indices && indices.length > 0) {
+            setSplitItems(indices.map(i => fullOrder.items[i]).filter(Boolean));
+          }
+        } catch {}
+      }
     } catch (error) {
       console.error('Error fetching order:', error);
       alert('Failed to load order details');
@@ -113,6 +127,19 @@ const DeliveryScreen = () => {
       if (completeResponse.data.success) {
         localStorage.removeItem(`working_on_${orderId}`);
         localStorage.removeItem(`scheduled_order_${orderId}`);
+        
+        // If split delivery, mark this group as delivered
+        if (splitGroup) {
+          try {
+            const splitData = JSON.parse(localStorage.getItem(`split_${orderId}`) || '{}');
+            if (splitGroup === '1') splitData.delivered1 = true;
+            if (splitGroup === '2') {
+              // Both delivered, clean up split data and mark order complete
+              localStorage.removeItem(`split_${orderId}`);
+            }
+            localStorage.setItem(`split_${orderId}`, JSON.stringify(splitData));
+          } catch {}
+        }
         
         toast.success('Delivery completed successfully!');
         setTimeout(() => navigate('/dashboard'), 1500);
@@ -201,9 +228,12 @@ const DeliveryScreen = () => {
         </div>
 
         <div className="order-summary">
+          {splitGroup && <div className="summary-row split-note-row"><span>Split Delivery Part {splitGroup}</span></div>}
           <div className="summary-row">
             <span>Order Total</span>
-            <strong>${order.total?.toFixed(2)}</strong>
+            <strong>${splitItems 
+              ? (splitItems.reduce((s, it) => s + (it.price * (it.quantity || 1)), 0) + (order.delivery_fee || 0)).toFixed(2) 
+              : order.total?.toFixed(2)}</strong>
           </div>
           <div className="summary-row">
             <span>Your Earning</span>

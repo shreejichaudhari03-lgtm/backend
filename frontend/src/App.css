@@ -2340,3 +2340,15 @@
   background: #e2e8f0;
   background-image: repeating-linear-gradient(90deg, #cbd5e1 0, #cbd5e1 4px, transparent 4px, transparent 8px);
 }
+
+.split-badge-inline {
+  color: #3b82f6;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.split-note-row {
+  color: #3b82f6;
+  font-weight: 600;
+  font-size: 0.85rem;
+}

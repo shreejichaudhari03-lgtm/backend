@@ -11,8 +11,10 @@ const ShoppingScreen = () => {
   const { orderId } = useParams();
   const [searchParams] = useSearchParams();
   const isScheduled = searchParams.get('source') === 'scheduled' || localStorage.getItem(`scheduled_order_${orderId}`) === 'true';
+  const splitGroup = searchParams.get('splitGroup'); // '1' or '2' or null
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
+  const [filteredItems, setFilteredItems] = useState([]);
   const [checkedItems, setCheckedItems] = useState(new Set());
   const [removedItems, setRemovedItems] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -28,7 +30,23 @@ const ShoppingScreen = () => {
         ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
         : `${BACKEND_URL}/api/orders/${orderId}`;
       const response = await axios.get(endpoint);
-      setOrder(response.data.order);
+      const fullOrder = response.data.order;
+      setOrder(fullOrder);
+      
+      // Filter items if this is a split delivery
+      if (splitGroup && fullOrder.items) {
+        try {
+          const splitData = JSON.parse(localStorage.getItem(`split_${orderId}`) || '{}');
+          const indices = splitGroup === '1' ? splitData.group1 : splitData.group2;
+          if (indices && indices.length > 0) {
+            setFilteredItems(indices.map(i => fullOrder.items[i]).filter(Boolean));
+          } else {
+            setFilteredItems(fullOrder.items);
+          }
+        } catch { setFilteredItems(fullOrder.items); }
+      } else {
+        setFilteredItems(fullOrder.items || []);
+      }
     } catch (error) {
       console.error('Error fetching order:', error);
       alert('Failed to load order details');
@@ -75,8 +93,13 @@ const ShoppingScreen = () => {
   const handleWhatsApp = () => {
     if (order?.customer_phone) {
       const phone = order.customer_phone.replace(/[^0-9]/g, '');
-      const invoiceUrl = `${window.location.origin}/invoice/${orderId}${isScheduled ? '?source=scheduled' : ''}`;
-      const message = encodeURIComponent(`Hi ${order.customer_name}, Thanks for using Repid Cart 💚\n\nI'm currently shopping for your Order #${order.order_number}.\n\nView your invoice here:\n${invoiceUrl}`);
+      const invoiceParams = new URLSearchParams();
+      if (isScheduled) invoiceParams.set('source', 'scheduled');
+      if (splitGroup) invoiceParams.set('splitGroup', splitGroup);
+      const invoiceQs = invoiceParams.toString() ? `?${invoiceParams.toString()}` : '';
+      const invoiceUrl = `${window.location.origin}/invoice/${orderId}${invoiceQs}`;
+      const splitNote = splitGroup ? ` (Part ${splitGroup})` : '';
+      const message = encodeURIComponent(`Hi ${order.customer_name}, Thanks for using Repid Cart 💚\n\nI'm currently shopping for your Order #${order.order_number}${splitNote}.\n\nView your invoice here:\n${invoiceUrl}`);
       window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     }
   };
@@ -89,28 +112,33 @@ const ShoppingScreen = () => {
         ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
         : `${BACKEND_URL}/api/orders/${orderId}`;
       
-      // Mark unavailable items directly in the items array
+      // Mark unavailable items directly in the items array (use full order items)
       const updatedItems = order.items.map((item, index) => ({
         ...item,
         unavailable: removedItems.has(index) ? true : undefined
       }));
       
       await axios.patch(endpoint, {
-        status: 'delivering',
+        status: splitGroup ? order.status : 'delivering', // Don't change status if split (partial delivery)
         delivery_partner_id: partnerId,
         items: removedItems.size > 0 ? updatedItems : undefined
       });
       
       localStorage.removeItem(`working_on_${orderId}`);
       
-      navigate(`/delivery/${orderId}${isScheduled ? '?source=scheduled' : ''}`);
+      // Pass splitGroup to delivery screen
+      const params = new URLSearchParams();
+      if (isScheduled) params.set('source', 'scheduled');
+      if (splitGroup) params.set('splitGroup', splitGroup);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      navigate(`/delivery/${orderId}${qs}`);
     } catch (error) {
       console.error('Error updating order:', error);
       alert('Failed to start delivery. Please try again.');
     }
   };
 
-  const availableItemsCount = order?.items?.length - removedItems.size || 0;
+  const availableItemsCount = filteredItems.length - removedItems.size || 0;
   const allItemsChecked = availableItemsCount > 0 && 
     checkedItems.size === availableItemsCount;
 
@@ -194,10 +222,13 @@ const ShoppingScreen = () => {
         </div>
 
         <div className="shopping-list" data-testid="shopping-list">
-          <h3 className="section-title">Items to collect ({order.items?.length || 0})</h3>
+          <h3 className="section-title">
+            Items to collect ({filteredItems.length})
+            {splitGroup && <span className="split-badge-inline"> · Part {splitGroup}</span>}
+          </h3>
           
-          {order.items && order.items.length > 0 ? (
-            order.items.map((item, index) => {
+          {filteredItems.length > 0 ? (
+            filteredItems.map((item, index) => {
               const isRemoved = removedItems.has(index);
               const isChecked = checkedItems.has(index);
               
