@@ -288,11 +288,26 @@ async def upload_delivery_photo(order_id: str, table: Optional[str] = "orders", 
             
         except Exception as storage_error:
             logger.warning(f"Storage upload failed: {storage_error}")
-            # Fallback: save as base64 in database if storage bucket doesn't exist
+            # Fallback: compress and save as base64 (small enough for DB)
             import base64
-            base64_image = base64.b64encode(file_content).decode('utf-8')
-            public_url = f"data:{file.content_type};base64,{base64_image}"
-            logger.info("Using base64 fallback for photo storage")
+            from io import BytesIO
+            try:
+                from PIL import Image
+                img = Image.open(BytesIO(file_content))
+                # Resize to max 400px wide for proof photos
+                max_width = 400
+                if img.width > max_width:
+                    ratio = max_width / img.width
+                    img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+                buf = BytesIO()
+                img.save(buf, format='JPEG', quality=50)
+                compressed = buf.getvalue()
+            except Exception:
+                # If PIL not available, just use original but it may fail
+                compressed = file_content
+            base64_image = base64.b64encode(compressed).decode('utf-8')
+            public_url = f"data:image/jpeg;base64,{base64_image}"
+            logger.info(f"Using compressed base64 fallback ({len(compressed)} bytes)")
         
         # Update the correct table with photo URL
         target_table = "scheduled_orders" if table == "scheduled_orders" else "orders"
