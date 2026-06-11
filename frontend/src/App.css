@@ -2405,3 +2405,13 @@
   color: #334155;
   margin: 0 0 0.5rem 0;
 }
+
+.completed-split-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #3b82f6;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 0.25rem;
+}

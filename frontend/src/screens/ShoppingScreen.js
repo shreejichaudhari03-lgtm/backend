@@ -35,15 +35,23 @@ const ShoppingScreen = () => {
       
       // Filter items if this is a split delivery
       if (splitGroup && fullOrder.items) {
+        // Try localStorage first, then fall back to splitGroup field in items
+        let filtered = null;
         try {
           const splitData = JSON.parse(localStorage.getItem(`split_${orderId}`) || '{}');
           const indices = splitGroup === '1' ? splitData.group1 : splitData.group2;
           if (indices && indices.length > 0) {
-            setFilteredItems(indices.map(i => fullOrder.items[i]).filter(Boolean));
-          } else {
-            setFilteredItems(fullOrder.items);
+            filtered = indices.map(i => fullOrder.items[i]).filter(Boolean);
           }
-        } catch { setFilteredItems(fullOrder.items); }
+        } catch {}
+        
+        if (!filtered) {
+          // Read from items' splitGroup field (saved in DB)
+          const groupNum = parseInt(splitGroup);
+          filtered = fullOrder.items.filter(item => item.splitGroup === groupNum);
+        }
+        
+        setFilteredItems(filtered && filtered.length > 0 ? filtered : fullOrder.items);
       } else {
         setFilteredItems(fullOrder.items || []);
       }

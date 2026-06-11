@@ -55,14 +55,23 @@ const InvoiceScreen = () => {
   // Filter items by split group if applicable
   let displayItems = order.items || [];
   if (splitGroup) {
+    let filtered = null;
+    // Try localStorage first (driver's device)
     try {
-      // Try localStorage first (driver's device)
       const splitData = JSON.parse(localStorage.getItem(`split_${orderId}`) || '{}');
       const indices = splitGroup === '1' ? splitData.group1 : splitData.group2;
       if (indices && indices.length > 0) {
-        displayItems = indices.map(i => (order.items || [])[i]).filter(Boolean);
+        filtered = indices.map(i => (order.items || [])[i]).filter(Boolean);
       }
     } catch {}
+    
+    // Fall back to splitGroup field in items (from DB — works for customers too)
+    if (!filtered || filtered.length === 0) {
+      const groupNum = parseInt(splitGroup);
+      filtered = (order.items || []).filter(item => item.splitGroup === groupNum);
+    }
+    
+    if (filtered && filtered.length > 0) displayItems = filtered;
   }
   
   const allItems = displayItems;

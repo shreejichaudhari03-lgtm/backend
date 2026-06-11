@@ -138,9 +138,11 @@ const DeliveryScreen = () => {
         } else if (splitGroup === '2') {
           splitData.delivered2 = true;
           splitData.photo2 = photoUrl;
-          // Both parts delivered — mark the whole order as completed
+          splitData.completed = true;
+          // Keep split data so completed view can show both deliveries
+          localStorage.setItem(`split_${orderId}`, JSON.stringify(splitData));
+          // Mark the whole order as completed
           await axios.patch(endpoint, { status: 'completed' });
-          localStorage.removeItem(`split_${orderId}`);
           toast.success('All deliveries completed!');
         }
         

@@ -30,14 +30,40 @@ const CompletedOrderScreen = () => {
         console.error('Error fetching order:', err);
       }
     } finally {
-      // Check for split data
+      // Check for split data: first localStorage, then from items' splitGroup field
       try {
         const data = localStorage.getItem(`split_${orderId}`);
-        if (data) setSplitData(JSON.parse(data));
+        if (data) {
+          setSplitData(JSON.parse(data));
+        }
       } catch {}
       setLoading(false);
     }
   };
+
+  // After order loads, reconstruct split info from items if not in localStorage
+  useEffect(() => {
+    if (order && !splitData && order.items) {
+      const hasSplitGroups = order.items.some(item => item.splitGroup);
+      if (hasSplitGroups) {
+        const group1 = order.items.map((_, i) => i).filter(i => order.items[i].splitGroup === 1);
+        const group2 = order.items.map((_, i) => i).filter(i => order.items[i].splitGroup === 2);
+        if (group1.length > 0 && group2.length > 0) {
+          // Also try to get photos from localStorage
+          let photos = {};
+          try {
+            const lsData = localStorage.getItem(`split_${orderId}`);
+            if (lsData) photos = JSON.parse(lsData);
+          } catch {}
+          setSplitData({ 
+            group1, group2, completed: true,
+            photo1: photos.photo1 || null,
+            photo2: photos.photo2 || null
+          });
+        }
+      }
+    }
+  }, [order]);
 
   if (loading) {
     return (

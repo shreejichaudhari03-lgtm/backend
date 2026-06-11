@@ -217,34 +217,53 @@ const DashboardScreen = () => {
     setSelectedSplitItems(new Set());
   };
 
-  const confirmSplit = () => {
+  const confirmSplit = async () => {
     if (!splitPickerOrder || selectedSplitItems.size === 0) return;
     const orderId = splitPickerOrder.id;
     const allIndices = splitPickerOrder.items.map((_, i) => i);
     const group1 = Array.from(selectedSplitItems);
     const group2 = allIndices.filter(i => !selectedSplitItems.has(i));
     
-    // Save split info to localStorage
+    // Mark each item with its split group and save to DB
+    const updatedItems = splitPickerOrder.items.map((item, i) => ({
+      ...item,
+      splitGroup: group1.includes(i) ? 1 : 2
+    }));
+    
+    try {
+      const endpoint = splitPickerScheduled
+        ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
+        : `${BACKEND_URL}/api/orders/${orderId}`;
+      await axios.patch(endpoint, { items: updatedItems });
+    } catch (err) {
+      console.error('Failed to save split to DB:', err);
+    }
+    
+    // Also save to localStorage for local state
     localStorage.setItem(`split_${orderId}`, JSON.stringify({ group1, group2, delivered1: false }));
     setSplitPickerOrder(null);
-    // Force re-render
-    setAvailableOrders(prev => [...prev]);
-    setScheduledOrders(prev => [...prev]);
+    
+    const partnerId = localStorage.getItem('partner_id');
+    fetchAllOrders(partnerId);
     toast.success('Order split! Deliver the first part now.');
   };
 
   const getSplitInfo = (orderId) => {
+    // Check localStorage first
     try {
       const data = localStorage.getItem(`split_${orderId}`);
-      return data ? JSON.parse(data) : null;
-    } catch { return null; }
+      if (data) return JSON.parse(data);
+    } catch {}
+    return null;
   };
 
-  const markSplitDelivered = (orderId, group) => {
-    const info = getSplitInfo(orderId);
-    if (!info) return;
-    if (group === 1) info.delivered1 = true;
-    localStorage.setItem(`split_${orderId}`, JSON.stringify(info));
+  const getSplitInfoFromItems = (items) => {
+    // Reconstruct split info from items' splitGroup field
+    if (!items || !items.some(i => i.splitGroup)) return null;
+    const group1 = items.map((_, i) => i).filter(i => items[i].splitGroup === 1);
+    const group2 = items.map((_, i) => i).filter(i => items[i].splitGroup === 2);
+    if (group1.length === 0 || group2.length === 0) return null;
+    return { group1, group2 };
   };
 
   const handleRejectOrder = async (orderId, isScheduled = false) => {
@@ -516,12 +535,25 @@ const DashboardScreen = () => {
         </button>
       )}
 
-      {type === 'completed' && (
-        <div className="completed-info">
-          <CheckCircle size={18} weight="fill" className="check-icon" />
-          <span>Completed {new Date(order.created_at).toLocaleDateString()}</span>
-        </div>
-      )}
+      {type === 'completed' && (() => {
+        const splitInfo = getSplitInfo(order.id);
+        const splitFromItems = getSplitInfoFromItems(order.items);
+        const wasSplit = (splitInfo && splitInfo.completed) || splitFromItems;
+        return (
+          <>
+            <div className="completed-info">
+              <CheckCircle size={18} weight="fill" className="check-icon" />
+              <span>Completed {new Date(order.created_at).toLocaleDateString()}</span>
+            </div>
+            {wasSplit && (
+              <div className="completed-split-indicator">
+                <Scissors size={14} />
+                <span>Split delivery (2 parts)</span>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Make completed orders clickable */}
       {type === 'completed' && (
