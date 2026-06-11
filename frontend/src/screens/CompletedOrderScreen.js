@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, CheckCircle, MapPin, User, Phone, Package, Camera } from '@phosphor-icons/react';
+import { ArrowLeft, CheckCircle, MapPin, User, Phone, Package, Camera, Scissors } from '@phosphor-icons/react';
 import ImageModal from '../components/ImageModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -10,6 +10,7 @@ const CompletedOrderScreen = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
+  const [splitData, setSplitData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
 
@@ -19,11 +20,9 @@ const CompletedOrderScreen = () => {
 
   const fetchOrderDetails = async () => {
     try {
-      // Try regular orders first
       const response = await axios.get(`${BACKEND_URL}/api/orders/${orderId}`);
       setOrder(response.data.order);
     } catch (error) {
-      // Fallback: try scheduled_orders table
       try {
         const scheduledRes = await axios.get(`${BACKEND_URL}/api/scheduled-orders/${orderId}`);
         setOrder(scheduledRes.data.order);
@@ -31,6 +30,11 @@ const CompletedOrderScreen = () => {
         console.error('Error fetching order:', err);
       }
     } finally {
+      // Check for split data
+      try {
+        const data = localStorage.getItem(`split_${orderId}`);
+        if (data) setSplitData(JSON.parse(data));
+      } catch {}
       setLoading(false);
     }
   };
@@ -63,6 +67,52 @@ const CompletedOrderScreen = () => {
     hour: '2-digit',
     minute: '2-digit'
   });
+
+  const isSplit = splitData && splitData.group1 && splitData.group2;
+  const group1Items = isSplit ? splitData.group1.map(i => order.items?.[i]).filter(Boolean) : [];
+  const group2Items = isSplit ? splitData.group2.map(i => order.items?.[i]).filter(Boolean) : [];
+
+  const renderItemList = (items) => (
+    <div className="completed-items-list">
+      {items.map((item, index) => (
+        <div key={index} className="completed-item">
+          {(item.image || item.image_url) && (
+            <img 
+              src={item.image || item.image_url}
+              alt={item.name}
+              className="completed-item-image"
+              onClick={() => setSelectedImage(item.image || item.image_url)}
+            />
+          )}
+          <div className="completed-item-details">
+            <span className="item-name">{item.name}</span>
+            <span className="item-meta">Qty: {item.quantity} × ${item.price?.toFixed(2)}</span>
+          </div>
+          <span className="item-total">${(item.quantity * item.price).toFixed(2)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderPhotoSection = (photoUrl, label) => {
+    if (!photoUrl) return null;
+    return (
+      <div className="split-photo-block">
+        <h4 className="split-photo-label">
+          <Camera size={16} weight="bold" />
+          {label}
+        </h4>
+        <div className="proof-photo-container">
+          <img 
+            src={photoUrl}
+            alt={label}
+            className="proof-photo"
+            onClick={() => setSelectedImage(photoUrl)}
+          />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="screen-container">
@@ -110,29 +160,43 @@ const CompletedOrderScreen = () => {
           </div>
         </div>
 
-        {/* Items List */}
-        <div className="order-detail-card">
-          <h3>Items Delivered ({order.items?.length || 0})</h3>
-          <div className="completed-items-list">
-            {order.items && order.items.map((item, index) => (
-              <div key={index} className="completed-item">
-                {(item.image || item.image_url) && (
-                  <img 
-                    src={item.image || item.image_url}
-                    alt={item.name}
-                    className="completed-item-image"
-                    onClick={() => setSelectedImage(item.image || item.image_url)}
-                  />
-                )}
-                <div className="completed-item-details">
-                  <span className="item-name">{item.name}</span>
-                  <span className="item-meta">Qty: {item.quantity} × ${item.price?.toFixed(2)}</span>
-                </div>
-                <span className="item-total">${(item.quantity * item.price).toFixed(2)}</span>
+        {isSplit ? (
+          <>
+            {/* Split Delivery 1 */}
+            <div className="order-detail-card split-delivery-card">
+              <div className="split-delivery-header">
+                <span className="split-dot split-dot-1">1</span>
+                <h3>Delivery 1 ({group1Items.length} items)</h3>
               </div>
-            ))}
-          </div>
-        </div>
+              {renderItemList(group1Items)}
+              {renderPhotoSection(splitData.photo1, 'Delivery 1 Proof')}
+            </div>
+
+            {/* Split Divider */}
+            <div className="completed-split-divider">
+              <Scissors size={14} />
+              <span>split order</span>
+            </div>
+
+            {/* Split Delivery 2 */}
+            <div className="order-detail-card split-delivery-card">
+              <div className="split-delivery-header">
+                <span className="split-dot split-dot-2">2</span>
+                <h3>Delivery 2 ({group2Items.length} items)</h3>
+              </div>
+              {renderItemList(group2Items)}
+              {renderPhotoSection(splitData.photo2, 'Delivery 2 Proof')}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Normal Items List */}
+            <div className="order-detail-card">
+              <h3>Items Delivered ({order.items?.length || 0})</h3>
+              {renderItemList(order.items || [])}
+            </div>
+          </>
+        )}
 
         {/* Order Total */}
         <div className="order-detail-card">
@@ -154,8 +218,8 @@ const CompletedOrderScreen = () => {
           </div>
         </div>
 
-        {/* Delivery Proof Photo */}
-        {order.delivery_photo_url && (
+        {/* Single Photo (non-split orders) */}
+        {!isSplit && order.delivery_photo_url && (
           <div className="order-detail-card">
             <h3>
               <Camera size={20} weight="bold" style={{ marginRight: '0.5rem' }} />
