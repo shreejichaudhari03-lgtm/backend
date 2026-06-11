@@ -139,16 +139,16 @@ const DashboardScreen = () => {
       const available = (availableRes.data.orders || [])
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       
-      // Filter completed orders to last 24 hours
+      // Filter completed orders to last 48 hours
       const now = new Date();
-      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
       const recentCompleted = (completedRes.data.orders || []).filter(order => {
         const orderDate = new Date(order.created_at);
-        return orderDate >= twentyFourHoursAgo;
+        return orderDate >= fortyEightHoursAgo;
       });
       const recentCompletedScheduled = completedScheduled.filter(order => {
         const orderDate = new Date(order.created_at);
-        return orderDate >= twentyFourHoursAgo;
+        return orderDate >= fortyEightHoursAgo;
       });
       
       // Merge completed from both tables

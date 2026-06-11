@@ -80,8 +80,13 @@ const DeliveryScreen = () => {
   const handleWhatsApp = () => {
     if (order?.customer_phone) {
       const phone = order.customer_phone.replace(/[^0-9]/g, '');
-      const invoiceUrl = `${window.location.origin}/invoice/${orderId}${isScheduled ? '?source=scheduled' : ''}`;
-      const message = encodeURIComponent(`Hi ${order.customer_name}, Thanks for using Repid Cart 💚\n\nYour Order #${order.order_number} has been delivered!\n\nView your invoice here:\n${invoiceUrl}`);
+      const invoiceParams = new URLSearchParams();
+      if (isScheduled) invoiceParams.set('source', 'scheduled');
+      if (splitGroup) invoiceParams.set('splitGroup', splitGroup);
+      const invoiceQs = invoiceParams.toString() ? `?${invoiceParams.toString()}` : '';
+      const invoiceUrl = `${window.location.origin}/invoice/${orderId}${invoiceQs}`;
+      const splitNote = splitGroup ? ` (Part ${splitGroup})` : '';
+      const message = encodeURIComponent(`Hi ${order.customer_name}, Thanks for using Repid Cart 💚\n\nYour Order #${order.order_number}${splitNote} has been delivered!\n\nView your invoice here:\n${invoiceUrl}`);
       window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     }
   };
@@ -114,37 +119,46 @@ const DeliveryScreen = () => {
         throw new Error('Photo upload failed');
       }
 
-      // Complete delivery on the correct table
       const endpoint = isScheduled 
         ? `${BACKEND_URL}/api/scheduled-orders/${orderId}`
         : `${BACKEND_URL}/api/orders/${orderId}`;
-      
-      const completeResponse = await axios.patch(
-        endpoint,
-        { status: 'completed' }
-      );
 
-      if (completeResponse.data.success) {
-        localStorage.removeItem(`working_on_${orderId}`);
-        localStorage.removeItem(`scheduled_order_${orderId}`);
+      if (splitGroup) {
+        // Split delivery flow
+        const splitData = JSON.parse(localStorage.getItem(`split_${orderId}`) || '{}');
         
-        // If split delivery, mark this group as delivered
-        if (splitGroup) {
-          try {
-            const splitData = JSON.parse(localStorage.getItem(`split_${orderId}`) || '{}');
-            if (splitGroup === '1') splitData.delivered1 = true;
-            if (splitGroup === '2') {
-              // Both delivered, clean up split data and mark order complete
-              localStorage.removeItem(`split_${orderId}`);
-            }
-            localStorage.setItem(`split_${orderId}`, JSON.stringify(splitData));
-          } catch {}
+        // Save photo URL for this split group
+        const photoUrl = uploadResponse.data.photo_url;
+        if (splitGroup === '1') {
+          splitData.delivered1 = true;
+          splitData.photo1 = photoUrl;
+          localStorage.setItem(`split_${orderId}`, JSON.stringify(splitData));
+          // Don't mark order as completed yet — Delivery 2 still pending
+          toast.success('Delivery 1 completed! Delivery 2 is ready.');
+        } else if (splitGroup === '2') {
+          splitData.delivered2 = true;
+          splitData.photo2 = photoUrl;
+          // Both parts delivered — mark the whole order as completed
+          await axios.patch(endpoint, { status: 'completed' });
+          localStorage.removeItem(`split_${orderId}`);
+          toast.success('All deliveries completed!');
         }
         
-        toast.success('Delivery completed successfully!');
+        localStorage.removeItem(`working_on_${orderId}`);
+        localStorage.removeItem(`scheduled_order_${orderId}`);
         setTimeout(() => navigate('/dashboard'), 1500);
       } else {
-        toast.error('Failed to complete delivery');
+        // Normal (non-split) delivery
+        const completeResponse = await axios.patch(endpoint, { status: 'completed' });
+
+        if (completeResponse.data.success) {
+          localStorage.removeItem(`working_on_${orderId}`);
+          localStorage.removeItem(`scheduled_order_${orderId}`);
+          toast.success('Delivery completed successfully!');
+          setTimeout(() => navigate('/dashboard'), 1500);
+        } else {
+          toast.error('Failed to complete delivery');
+        }
       }
     } catch (error) {
       console.error('Error completing delivery:', error);
